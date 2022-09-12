@@ -1,15 +1,12 @@
+#define directionPin 8
+#define ledPin 9
 
 volatile int counter; //vrednost enkodera od pocetka koda
 
 void encoder(){
-  if(digitalRead(4)){
-        if(counter<255){counter++;};
-      }
-    else{
-        if(counter>-255){counter--;};
-      }
-    
-  }
+  if(digitalRead(4)) counter++;
+  else counter--;
+}
 
 void setup() {
   pinMode(3,INPUT_PULLUP);
