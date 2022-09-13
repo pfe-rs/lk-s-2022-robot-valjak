@@ -50,45 +50,99 @@ H_voltageToPendulumVelocity = control.tf(num3, den3)
 H_voltageToPendulumAngle = control.series(H_voltageToPendulumVelocity, control.tf([1], [1, 0]))
 H_voltageToRobotAngle = control.series(H_voltageToRobotVelocity, control.tf([1], [1, 0]))
 H_voltageToInclinationAngle = control.minreal(control.parallel(H_voltageToPendulumAngle, H_voltageToRobotAngle))
+H_voltageToInclinationVelocity = control.minreal(control.parallel(H_voltageToPendulumVelocity, H_voltageToRobotVelocity))
 
 
 # Discretization of H_voltageToInclinationAngle and H_voltageToRobotAnlge
-H_voltageToInclinationAngleDiscrete = control.sample_system(H_voltageToInclinationAngle, 1/200, method='zoh')
-H_voltageToRobotAngleDiscrete = control.sample_system(H_voltageToRobotAngle, 1/200, method='zoh')
+dt = 1/200
+H_voltageToInclinationAngleDiscrete = control.sample_system(H_voltageToInclinationAngle, dt, method='zoh')
+H_voltageToInclinationVelocityDiscrete = control.sample_system(H_voltageToInclinationVelocity, dt, method='zoh')
+H_voltageToRobotAngleDiscrete = control.sample_system(H_voltageToRobotAngle, dt, method='zoh')
 
 
 # Matrix solution of discretization
 H_matrix = control.tf([H_voltageToInclinationAngleDiscrete.num[0],
-                       H_voltageToInclinationAngleDiscrete.num[0],
+                       H_voltageToInclinationVelocityDiscrete.num[0],
                        H_voltageToRobotAngleDiscrete.num[0]],
                       [H_voltageToInclinationAngleDiscrete.den[0],
-                       H_voltageToInclinationAngleDiscrete.den[0],
+                       H_voltageToInclinationVelocityDiscrete.den[0],
                        H_voltageToRobotAngleDiscrete.den[0]],
                       1/200)
 sys_ss_matrix = control.tf2ss(H_matrix)
 
+number_of_iterations = 300
 x1_matrix = np.zeros([4,1])
-t_matrix = np.arange(1000)*0.005
-f_matrix = []
+t_matrix = np.arange(number_of_iterations)*0.005
+f_matrix = [[[0],[0],[0]]]
 
-def next_state_output(sys_input):
+gyro_noise_scalar = 0.001
+gyro_expectation_noise = 0.05
+def next_output(sys_input):
+
     variance_accel = 0.002
-    variance_gyro = 0.002
+    variance_gyro = 0.01
     variance_encoder = 0.01
     w = np.array([np.random.normal(0, variance_accel), 
-                  np.random.normal(0, variance_gyro), 
+                  np.random.normal(gyro_expectation_noise, variance_gyro), 
                   np.random.normal(0, variance_encoder)]).reshape([3,1])
+
     global x1_matrix
-    x = sys_ss_matrix.A.dot(x1_matrix) + sys_ss_matrix.B
+    x = sys_ss_matrix.A.dot(x1_matrix) + sys_ss_matrix.B*sys_input
     y = sys_ss_matrix.C.dot(x) + w
     x1_matrix = x
     f_matrix.append(y)
 
     return y
 
-for i in range(1000):
-    next_state_output(1)
-    
-f_matrix = np.array(f_matrix)
-plt.plot(t_matrix, f_matrix[:,0,0])
+# Controller discretization
+N = 20
+T_s = dt
+K_p = 10  #50
+K_i = 400 #400
+K_d = 10  #10
+b0 = K_p*(1 + N*T_s) + K_i*T_s*(1 + N*T_s) + K_d*N
+b1 = -(K_p*(2 + N*T_s) + K_i*T_s + 2*K_d*N)
+b2 = K_p + K_d*N
+a0 = (1 + N*T_s)
+a1 = -(2 + N*T_s)
+a2 = 1
+controller = control.tf([b0, b1, b2], [a0, a1, a2], T_s)
+print(controller)
+
+# PID implementation
+T_s = dt
+tau = 0.2
+alpha = tau/(tau + dt)
+e0 = 0
+e1 = 0
+e2 = 0
+u0 = 0
+u1 = 0
+u2 = 0
+angles = []
+current_angle = 0
+desired_angle = 0.1
+for i in range(number_of_iterations):
+    # controller
+    e2 = e1
+    e1 = e0
+    e0 = desired_angle - current_angle
+    u2 = u1
+    u1 = u0
+    u0 = (-a1/a0)*u1 + (-a2/a0)*u2 + (b0/a0)*e0 + (b1/a0)*e1 + (b2/a0)*e2
+
+    # plant
+    y = next_output(u0)
+
+    # complementary filter
+    current_angle = (1 - alpha)*(current_angle + y[1][0]*T_s) + alpha*y[0][0]
+    angles.append(current_angle)
+
+plt.plot(t_matrix, angles)
 plt.show()
+
+# for i in range(number_of_iterations):
+#     next_output(1)
+# f_matrix = np.array(f_matrix)
+# plt.plot(t_matrix, f_matrix[1:,1,0])
+# plt.show()
