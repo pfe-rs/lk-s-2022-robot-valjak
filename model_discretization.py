@@ -97,5 +97,5 @@ def next_output(sys_input):
 for i in range(number_of_itterations):
     next_output(1)
 f_matrix = np.array(f_matrix)
-plt.plot(t_matrix, f_matrix[1:,1,0])
+plt.plot(t_matrix, f_matrix[1:,0,0])
 plt.show()

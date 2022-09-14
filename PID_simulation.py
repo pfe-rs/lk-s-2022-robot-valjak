@@ -54,7 +54,7 @@ H_voltageToInclinationVelocity = control.minreal(control.parallel(H_voltageToPen
 
 
 # Discretization of H_voltageToInclinationAngle and H_voltageToRobotAnlge
-dt = 1/200
+dt = 0.005
 H_voltageToInclinationAngleDiscrete = control.sample_system(H_voltageToInclinationAngle, dt, method='zoh')
 H_voltageToInclinationVelocityDiscrete = control.sample_system(H_voltageToInclinationVelocity, dt, method='zoh')
 H_voltageToRobotAngleDiscrete = control.sample_system(H_voltageToRobotAngle, dt, method='zoh')
@@ -67,33 +67,27 @@ H_matrix = control.tf([H_voltageToInclinationAngleDiscrete.num[0],
                       [H_voltageToInclinationAngleDiscrete.den[0],
                        H_voltageToInclinationVelocityDiscrete.den[0],
                        H_voltageToRobotAngleDiscrete.den[0]],
-                      1/200)
+                      dt)
 sys_ss_matrix = control.tf2ss(H_matrix)
 
-number_of_iterations = 300
-x1_matrix = np.zeros([4,1])
-t_matrix = np.arange(number_of_iterations)*0.005
-f_matrix = [[[0],[0],[0]]]
+number_of_iterations = 1000
 
-gyro_noise_scalar = 0.001
-gyro_expectation_noise = 0.05
-def next_output(sys_input):
+class Plant:
+    def __init__(self):
+        self.x1_matrix = np.zeros([4,1])
+        self.f_matrix = [[[0],[0],[0]]]
+        t_matrix = np.arange(number_of_iterations)*dt
 
-    variance_accel = 0.002
-    variance_gyro = 0.01
-    variance_encoder = 0.01
-    w = np.array([np.random.normal(0, variance_accel), 
-                  np.random.normal(gyro_expectation_noise, variance_gyro), 
-                  np.random.normal(0, variance_encoder)]).reshape([3,1])
+    def next_output(self, sys_input):
+        x = sys_ss_matrix.A.dot(self.x1_matrix) + sys_ss_matrix.B*sys_input
+        y = sys_ss_matrix.C.dot(x)
+        self.x1_matrix = x
+        self.f_matrix.append(y)
 
-    global x1_matrix
-    x = sys_ss_matrix.A.dot(x1_matrix) + sys_ss_matrix.B*sys_input
-    y = sys_ss_matrix.C.dot(x) + w
-    x1_matrix = x
-    f_matrix.append(y)
+        return y
 
-    return y
 
+#____________________________________ PID IMPLEMENTATION ____________________________________
 # Controller discretization
 N = 20
 T_s = dt
@@ -106,40 +100,107 @@ b2 = K_p + K_d*N
 a0 = (1 + N*T_s)
 a1 = -(2 + N*T_s)
 a2 = 1
-controller = control.tf([b0, b1, b2], [a0, a1, a2], T_s)
-print(controller)
+class Controller:
+    def __init__(self):
+        self.e0 = 0
+        self.e1 = 0
+        self.e2 = 0
+        self.u0 = 0
+        self.u1 = 0
+        self.u2 = 0
+        self.controller_discrete_tf = control.tf([b0, b1, b2], [a0, a1, a2], T_s)
 
-# PID implementation
-T_s = dt
-tau = 0.2
-alpha = tau/(tau + dt)
-e0 = 0
-e1 = 0
-e2 = 0
-u0 = 0
-u1 = 0
-u2 = 0
-angles = []
+    def update(self, desired_angle, current_angle):
+        self.e2 = self.e1
+        self.e1 = self.e0
+        self.e0 = desired_angle - current_angle
+        self.u2 = self.u1
+        self.u1 = self.u0
+        self.u0 = (-a1/a0)*self.u1 + (-a2/a0)*self.u2 + (b0/a0)*self.e0 + (b1/a0)*self.e1 + (b2/a0)*self.e2
+
+def add_noise():
+    variance_accel = 0.002
+
+    variance_gyro = 0.01
+    gyro_expectation_noise = 0.05
+
+    variance_encoder = 0.01
+
+    w = np.array([np.random.normal(0, variance_accel), 
+                  np.random.normal(gyro_expectation_noise, variance_gyro), 
+                  np.random.normal(0, variance_encoder)]).reshape([3,1])
+    
+    return w
+
+def complementary_filter(current_angle, y):
+    T_s = dt
+    tau = 0.2
+    alpha = tau/(tau + dt)
+
+    return (1 - alpha)*(current_angle + y[1][0]*T_s) + alpha*y[0][0]
+
+plant = Plant()
+controller = Controller()
+inclination_angles = []
+robot_angles = []
 current_angle = 0
-desired_angle = 0.1
+desired_angle = 0.5
 for i in range(number_of_iterations):
+
     # controller
-    e2 = e1
-    e1 = e0
-    e0 = desired_angle - current_angle
-    u2 = u1
-    u1 = u0
-    u0 = (-a1/a0)*u1 + (-a2/a0)*u2 + (b0/a0)*e0 + (b1/a0)*e1 + (b2/a0)*e2
+    controller.update(desired_angle, current_angle)
 
     # plant
-    y = next_output(u0)
+    y = plant.next_output(controller.u0) #+ add_noise()
 
     # complementary filter
-    current_angle = (1 - alpha)*(current_angle + y[1][0]*T_s) + alpha*y[0][0]
-    angles.append(current_angle)
+    current_angle = complementary_filter(current_angle, y)
+    inclination_angles.append(current_angle)
+    robot_angles.append(y[2][0] - current_angle)
 
-plt.plot(t_matrix, angles)
-plt.show()
+# plt.plot(t_matrix, angles)
+# plt.show()
+
+
+#____________________________________ GRAPHICS SIMULATION ____________________________________
+import math
+import pygame as pg
+import pygamebg
+
+pg.init()
+(width, height) = (700, 700)
+ground_height = 100
+pendulum_width = 5
+pendulum_distance = height//2 - ground_height - 15
+window = pygamebg.open_window(width, height, "Robot valjak simulacija")
+
+def draw(inclination_angle, robot_angle):
+    window.fill(pg.Color("sky blue"))
+
+    pg.draw.circle(window, pg.Color("black"), (width//2, height//2), width//2-ground_height, 8)
+    pg.draw.line(window, pg.Color("black"), (width//2, height//2), 
+                                            (width//2 + pendulum_distance*math.sin(inclination_angle), 
+                                            height//2 + pendulum_distance*math.cos(inclination_angle)),
+                                            pendulum_width)
+    pg.draw.line(window, pg.Color("red"), (width//2 + pendulum_distance*math.sin(robot_angle), 
+                                           height//2 + pendulum_distance*math.cos(robot_angle)),
+                                          (width//2 + (pendulum_distance + 15)*math.sin(robot_angle), 
+                                           height//2 + (pendulum_distance + 15)*math.cos(robot_angle)),
+                                           pendulum_width)
+
+    pg.draw.rect(window, pg.Color("brown"), (0, height-ground_height, width, height))
+
+i = 0
+def new_frame():
+    global i
+    if i < len(inclination_angles):
+        draw(inclination_angles[i], robot_angles[i])
+    else:
+        draw(inclination_angles[-1], robot_angles[-1])
+    i += 1
+
+pygamebg.frame_loop((1/T_s)/10, new_frame)
+pg.quit()
 
 # for i in range(number_of_iterations):
 #     next_output(1)
