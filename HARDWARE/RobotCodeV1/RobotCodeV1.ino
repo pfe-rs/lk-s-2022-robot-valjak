@@ -1,6 +1,9 @@
 #include <Wire.h>
 
 const int MPU = 0x68; // MPU6050 I2C address
+const int directionPin = 8;
+const int motorPin = 9;
+volatile int counter; //vrednost enkodera od pocetka koda
 float AccX, AccY, AccZ;
 float GyroX, GyroY, GyroZ;
 float accAngleX, accAngleY, gyroAngleX, gyroAngleY, gyroAngleZ;
@@ -14,8 +17,20 @@ int c = 0;
 unsigned long dt = 5000;
 unsigned long previous_time = 0;
 
+void encoder(){
+  if(digitalRead(4)) counter++;
+  else counter--;
+}
+
 void setup() {
-  Serial.begin(19200);
+  Serial.begin(9600);
+
+  pinMode(3,INPUT_PULLUP);
+  pinMode(4,INPUT_PULLUP);
+  pinMode(directionPin,OUTPUT);
+  pinMode(motorPin,OUTPUT);
+  attachInterrupt(digitalPinToInterrupt(3), encoder, RISING);
+  Serial.println("conection.......");
   
   MPU6050_initialization();
   
@@ -40,6 +55,11 @@ void setup() {
 
 
 void loop() {
+  //Serial.println("...............................");
+  char n;
+  String out, temp;
+  int motorOut;
+
   
   float accAngleY = read_accel_data();
     
@@ -48,16 +68,67 @@ void loop() {
   // Complementary filter - combine acceleromter and gyro angle values
   float tau = 0.2;
   float alpha = tau/(tau + 0.005);
-  pitch = (1 - alpha)*(pitch + (GyroY * dt)/1000000.0) + alpha * accAngleY;
+  pitch = (1 - alpha)*(pitch + (GyroY * dt)/1000000.0) + alpha * accAngleY;//pitch range +/- 1.56
   
   // Print the values on the serial monitor
-  Serial.print(pitch);
-  Serial.println();
+  //Serial.print(pitch);
+  //Serial.println();
+//  if(Serial.available()>0){
+////    Serial.println("check");
+//    char n = Serial.read();
+//    if(n != '\n'){
+//      temp += n;
+//      //Serial.println(n);
+//      }
+//    else{
+//      out = temp;
+//      motorOut = out.toInt();
+//      Serial.println(temp);
+//      Serial.println(motorOut);
+//      driveMotor(motorOut);
+//      Serial.println(motorOut);
+//      temp = "";
+//      }
+//    }
+    
+    while (Serial.available() > 0) {
+    int n = Serial.read();
+    if (isDigit(n)) {
+      temp += (char)n;
+    }
+    if (n == '\n') {
+      motorOut = temp.toInt();
+      driveMotor(motorOut);
+      Serial.println(temp);
+      temp = "";
+    }
+  }
+  
+  
 
   // Time control
   while(micros() < previous_time + dt) {}
   previous_time = micros();
 }
+
+float readEncoderData(){
+  return counter/(2*PI);
+  }
+
+void driveMotor(int speed){
+
+  
+
+  speed = min(speed,15);
+  speed = max(speed,-15);
+
+  speed = map(speed,-15,15,-255,255);
+
+//  Serial.print(speed);
+//  Serial.print(',');
+  if(speed>0){digitalWrite(directionPin,LOW);analogWrite(motorPin,abs(speed));/*Serial.println(1);*/};
+  if(speed<=0){digitalWrite(directionPin,HIGH);analogWrite(motorPin,255-abs(speed));/*Serial.println(-1);*/};
+  }
 
 void MPU6050_initialization() {
   Wire.begin();                      // Initialize comunication
