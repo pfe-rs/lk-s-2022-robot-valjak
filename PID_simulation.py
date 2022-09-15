@@ -78,14 +78,14 @@ class Plant:
         self.f_matrix = [[[0],[0],[0]]]
         t_matrix = np.arange(number_of_iterations)*dt
 
-    def next_output(self, sys_input):
+    def next_output(self, sys_input, noise=False):
         x = sys_ss_matrix.A.dot(self.x1_matrix) + sys_ss_matrix.B*sys_input
-        y = sys_ss_matrix.C.dot(x)
+        y = sys_ss_matrix.C.dot(x) if noise == False else sys_ss_matrix.C.dot(x) + add_noise()
         self.x1_matrix = x
         self.f_matrix.append(y)
 
         return y
-
+        
 
 #____________________________________ PID IMPLEMENTATION ____________________________________
 # Controller discretization
@@ -139,71 +139,67 @@ def complementary_filter(current_angle, y):
 
     return (1 - alpha)*(current_angle + y[1][0]*T_s) + alpha*y[0][0]
 
-plant = Plant()
-controller = Controller()
-inclination_angles = []
-robot_angles = []
-current_angle = 0
-desired_angle = 0.5
-for i in range(number_of_iterations):
-
-    # controller
-    controller.update(desired_angle, current_angle)
-
-    # plant
-    y = plant.next_output(controller.u0) #+ add_noise()
-
-    # complementary filter
-    current_angle = complementary_filter(current_angle, y)
-    inclination_angles.append(current_angle)
-    robot_angles.append(y[2][0] - current_angle)
-
-# plt.plot(t_matrix, angles)
-# plt.show()
-
 
 #____________________________________ GRAPHICS SIMULATION ____________________________________
-import math
-import pygame as pg
-import pygamebg
+if __name__ == "__main__":
+    
+    plant = Plant()
+    controller = Controller()
+    inclination_angles = []
+    robot_angles = []
+    current_angle = 0
+    desired_angle = 0.5
+    for i in range(number_of_iterations):
 
-pg.init()
-(width, height) = (700, 700)
-ground_height = 100
-pendulum_width = 5
-pendulum_distance = height//2 - ground_height - 15
-window = pygamebg.open_window(width, height, "Robot valjak simulacija")
+        # controller
+        controller.update(desired_angle, current_angle)
 
-def draw(inclination_angle, robot_angle):
-    window.fill(pg.Color("sky blue"))
+        # plant
+        y = plant.next_output(controller.u0) # If you want noise add noise=True
 
-    pg.draw.circle(window, pg.Color("black"), (width//2, height//2), width//2-ground_height, 8)
-    pg.draw.line(window, pg.Color("black"), (width//2, height//2), 
-                                            (width//2 + pendulum_distance*math.sin(inclination_angle), 
-                                            height//2 + pendulum_distance*math.cos(inclination_angle)),
+        # complementary filter
+        current_angle = complementary_filter(current_angle, y)
+        inclination_angles.append(current_angle)
+        robot_angles.append(y[2][0] - current_angle)
+
+    # plt.plot(t_matrix, angles)
+    # plt.show()
+
+    import math
+    import pygame as pg
+    import pygamebg
+
+    pg.init()
+    (width, height) = (700, 700)
+    ground_height = 100
+    pendulum_width = 5
+    pendulum_distance = height//2 - ground_height - 15
+    window = pygamebg.open_window(width, height, "Robot valjak simulacija")
+
+    def draw(inclination_angle, robot_angle):
+        window.fill(pg.Color("sky blue"))
+
+        pg.draw.circle(window, pg.Color("black"), (width//2, height//2), width//2-ground_height, 8)
+        pg.draw.line(window, pg.Color("black"), (width//2, height//2), 
+                                                (width//2 + pendulum_distance*math.sin(inclination_angle), 
+                                                height//2 + pendulum_distance*math.cos(inclination_angle)),
+                                                pendulum_width)
+        pg.draw.line(window, pg.Color("red"), (width//2 + pendulum_distance*math.sin(robot_angle), 
+                                            height//2 + pendulum_distance*math.cos(robot_angle)),
+                                            (width//2 + (pendulum_distance + 15)*math.sin(robot_angle), 
+                                            height//2 + (pendulum_distance + 15)*math.cos(robot_angle)),
                                             pendulum_width)
-    pg.draw.line(window, pg.Color("red"), (width//2 + pendulum_distance*math.sin(robot_angle), 
-                                           height//2 + pendulum_distance*math.cos(robot_angle)),
-                                          (width//2 + (pendulum_distance + 15)*math.sin(robot_angle), 
-                                           height//2 + (pendulum_distance + 15)*math.cos(robot_angle)),
-                                           pendulum_width)
 
-    pg.draw.rect(window, pg.Color("brown"), (0, height-ground_height, width, height))
+        pg.draw.rect(window, pg.Color("brown"), (0, height-ground_height, width, height))
 
-i = 0
-def new_frame():
-    global i
-    if i < len(inclination_angles):
-        draw(inclination_angles[i], robot_angles[i])
-    else:
-        draw(inclination_angles[-1], robot_angles[-1])
-    i += 1
+    i = 0
+    def new_frame():
+        global i
+        if i < len(inclination_angles):
+            draw(inclination_angles[i], robot_angles[i])
+        else:
+            draw(inclination_angles[-1], robot_angles[-1])
+        i += 1
 
-pygamebg.frame_loop((1/T_s)/10, new_frame)
-pg.quit()
-
-# for i in range(number_of_iterations):
-#     next_output(1)
-# f_matrix = np.array(f_matrix)
-# plt.plot(t_matrix, f_matrix[1:,1,0])
-# plt.show()
+    pygamebg.frame_loop((1/T_s)/10, new_frame)
+    pg.quit()
