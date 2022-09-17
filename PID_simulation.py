@@ -1,3 +1,4 @@
+import math
 import control
 import numpy as np
 import matplotlib.pyplot as plt
@@ -71,7 +72,15 @@ H_matrix = control.tf([H_voltageToInclinationAngleDiscrete.num[0],
                       dt)
 sys_ss_matrix = control.tf2ss(H_matrix)
 
-number_of_iterations = 50
+number_of_iterations = 10000
+
+def sign_function(x):
+    if x > 0:
+        return 1
+    elif x == 0:
+        return 0
+    else:
+        return -1
 
 def add_noise():
     variance_accel = 0.002
@@ -142,38 +151,39 @@ def complementary_filter(current_angle, y):
 
 def PID_inclination_angle():
     plant = Plant()
-    K_p, K_i, K_d = 10, 400, 10
+    K_p, K_i, K_d = 6*2, 20, 0.45*5 #T_u=0.6 i K_u=10
     controller = Controller(K_p, K_i, K_d)
+
     inclination_angles = []
     robot_angles = []
     current_angle = 0
     desired_angle = 0.025
-    hlp = []
-    for i in range(number_of_iterations):
+
+    for _ in range(number_of_iterations):
 
         # controller
         controller.update(desired_angle, current_angle)
 
         # plant
-        y = plant.next_output(controller.u0) # If you want noise add noise=True
-        print(controller.u0)
-        hlp.append(y[2][0])
+        max_voltage = 12
+        y = plant.next_output(min(controller.u0, max_voltage)) # If you want noise add noise=True
 
         # complementary filter
         current_angle = complementary_filter(current_angle, y)
         inclination_angles.append(current_angle)
-        robot_angles.append(y[2][0] - current_angle)
+        robot_angles.append(-(y[2][0] - current_angle))
 
-    plt.plot(np.arange(number_of_iterations-1)*dt, [(hlp[i]-hlp[i-1])/dt for i in range(1, number_of_iterations)])
+    plt.plot(np.arange(number_of_iterations)*dt, inclination_angles)
     plt.show()
     return (inclination_angles, robot_angles)
 
 def PID_robot_angular_velocity():
     plant = Plant()
-    K_p, K_i, K_d = 10, 400, 10
+    K_p, K_i, K_d = 6*2, 20, 0.45*5
     inclination_angle_controller = Controller(K_p, K_i, K_d)
-    K_p, K_i, K_d = -1, 0, -0.5 #10, 5, 0
+    K_p, K_i, K_d = -0.5, -0.1, -0.5 #-0.5, -0.1, -0.5
     angular_velocity_controller = Controller(K_p, K_i, K_d)
+
     desired_velocity = -0.3
     inclination_angles = [0]
     robot_angles = [0]
@@ -181,16 +191,18 @@ def PID_robot_angular_velocity():
     omega = 1
     high_pass_filter = transfer_function([omega, 0], [1, omega])
 
-    for i in range(number_of_iterations):
+    for _ in range(number_of_iterations):
 
         # Angular velocity controller
         angular_velocity_controller.update(desired_velocity, robot_angular_velocities[-1])
 
         # Inclination angle controller
-        inclination_angle_controller.update(angular_velocity_controller.u0, inclination_angles[-1])
+        max_inclination_angle = 1.5
+        inclination_angle_controller.update(min(angular_velocity_controller.u0, max_inclination_angle), inclination_angles[-1])
 
         # Plant
-        y = plant.next_output(inclination_angle_controller.u0)
+        max_voltage = 12
+        y = plant.next_output(min(inclination_angle_controller.u0, max_voltage))
 
         # Complementary filter
         inclination_angle = complementary_filter(inclination_angles[-1], y)
@@ -205,11 +217,61 @@ def PID_robot_angular_velocity():
         robot_angular_velocities.append(robot_angular_velocity)
     
     t = np.arange(number_of_iterations)*dt
-    robot_angles = np.array(robot_angles)
     robot_angular_velocities = np.array(robot_angular_velocities)
     plt.plot(t, robot_angular_velocities[1:])
-    #plt.plot(t, robot_angles[1:])
-    plt.plot(t, (robot_angles[1:] - robot_angles[:-1]) / dt)
+    plt.show()
+    return (inclination_angles, robot_angles)
+
+def PID_robot_angle():
+    plant = Plant()
+    K_p, K_i, K_d = 6*2, 20, 0.45*5
+    inclination_angle_controller = Controller(K_p, K_i, K_d)
+    K_p, K_i, K_d = -0.5, -0.1, -0.5 #-0.5, -0.1, -0.5
+    angular_velocity_controller = Controller(K_p, K_i, K_d)
+    K_p, K_i, K_d = 0.5, 0, 0
+    robot_angle_controller = Controller(K_p, K_i, K_d)
+
+    desired_robot_angle = -1.56
+    inclination_angles = [0]
+    robot_angles = [0]
+    robot_angular_velocities = [0]
+    omega = 1
+    high_pass_filter = transfer_function([omega, 0], [1, omega])
+
+    for _ in range(number_of_iterations):
+
+        # Robot angle controller
+        robot_angle_controller.update(desired_robot_angle, robot_angles[-1])
+
+        # Angular velocity controller
+        max_angular_velocity = -0.9
+        angular_velocity_controller.update(max(robot_angle_controller.u0, max_angular_velocity), robot_angular_velocities[-1])
+
+        # Inclination angle controller
+        max_inclination_angle = 1.5
+        inclination_angle_controller.update(min(angular_velocity_controller.u0, max_inclination_angle), inclination_angles[-1])
+
+        # Plant
+        max_voltage = 12
+        y = plant.next_output(min(inclination_angle_controller.u0, max_voltage))
+
+        # Complementary filter
+        inclination_angle = complementary_filter(inclination_angles[-1], y)
+
+        # Differentiator
+        robot_angle = -(y[2][0] - inclination_angle) #-(pendulum_angle - inclination_angle)
+        robot_angular_velocity = high_pass_filter.next_output(robot_angle)
+
+        # Update
+        inclination_angles.append(inclination_angle)
+        robot_angles.append(robot_angle)
+        robot_angular_velocities.append(robot_angular_velocity)
+
+    t = np.arange(number_of_iterations)*dt
+    robot_angles = np.array(robot_angles)
+    robot_angular_velocities = np.array(robot_angular_velocities)
+    plt.plot(t, robot_angles[1:])
+    plt.plot(t, robot_angular_velocities[1:])
     plt.show()
     return (inclination_angles, robot_angles)
 
@@ -222,7 +284,8 @@ if __name__ == "__main__":
     import pygamebg
 
     # inclination_angles, robot_angles = PID_inclination_angle()
-    inclination_angles, robot_angles = PID_robot_angular_velocity()
+    # inclination_angles, robot_angles = PID_robot_angular_velocity()
+    inclination_angles, robot_angles = PID_robot_angle()
     
     pg.init()
     (width, height) = (700, 700)
