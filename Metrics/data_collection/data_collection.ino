@@ -1,5 +1,10 @@
 #include <Wire.h>
 
+#define interrupt_pin 3
+#define encoder_pin   4
+#define direction_pin 10
+#define motor_pin     9
+
 const int MPU = 0x68; // MPU6050 I2C address
 float AccX, AccY, AccZ;
 float GyroX, GyroY, GyroZ;
@@ -14,8 +19,16 @@ int c = 0;
 unsigned long dt = 5000;
 unsigned long previous_time = 0;
 
+volatile int encoder_counter = 0;
+
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(9600);
+
+  pinMode(interrupt_pin,INPUT_PULLUP);
+  pinMode(encoder_pin,INPUT_PULLUP);
+  pinMode(direction_pin,OUTPUT);
+  pinMode(motor_pin,OUTPUT);
+  attachInterrupt(digitalPinToInterrupt(interrupt_pin), encoder_interrupt, RISING);
   
   MPU6050_initialization();
   
@@ -27,15 +40,38 @@ void setup() {
 void loop() {
   float accAngleY = read_accel_data();
   float GyroY = read_gyro_data();
+  float encoder = read_encoder_data();
   
   Serial.print(accAngleY);
   Serial.print(",");
-  Serial.println(GyroY);
+  Serial.print(GyroY);
+  Serial.print(",");
+  Serial.println(encoder);
   
   // Time control
   while(micros() < previous_time + dt) {}
   previous_time = micros();
 }
+
+void encoder_interrupt() {
+  if(digitalRead(encoder_pin)) encoder_counter++;
+  else encoder_counter--;
+}
+
+void drive_motor(int voltage) {
+  int limit = 5;
+
+  voltage = map(constrain(voltage, -limit, limit), -12, 12, -255, 255);
+
+  if(voltage>0) {
+    digitalWrite(direction_pin, LOW);
+    analogWrite(motor_pin, voltage);
+  } else {
+    digitalWrite(direction_pin,HIGH);
+    analogWrite(motor_pin, 255-abs(voltage));
+  }
+}
+
 void MPU6050_initialization() {
   Wire.begin();                      // Initialize comunication
   Wire.beginTransmission(MPU);       // Start communication with MPU6050 // MPU=0x68
@@ -85,6 +121,11 @@ float read_gyro_data() {
   //return GyroX;
   return GyroY;
   //return GyroZ;
+}
+
+float read_encoder_data() {
+  float steps_per_revolution = 600;
+  return (encoder_counter*2.0*PI)/steps_per_revolution;
 }
 
 float degree_to_radian(float degree) {return (degree * PI)/180.0;}
