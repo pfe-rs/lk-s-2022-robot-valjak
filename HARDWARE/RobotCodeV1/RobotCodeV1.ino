@@ -90,10 +90,11 @@ void loop() {
 //      temp = "";
 //      }
 //    }
-    
+    Serial.println(Serial.available());
     while (Serial.available() > 0) {
       
     char n = Serial.read();
+    Serial.print(n);
     if (isDigit(n)||n=='-') {
       temp += n;
     }

@@ -33,7 +33,7 @@ void setup() {
   MPU6050_initialization();
   
   // Call this function if you need to get the IMU error values for your module
-  //calculate_IMU_error();
+//  calculate_IMU_error();
   delay(20);
 }
  
@@ -67,7 +67,7 @@ void drive_motor(int voltage) {
     digitalWrite(direction_pin, LOW);
     analogWrite(motor_pin, voltage);
   } else {
-    digitalWrite(direction_pin,HIGH);
+    digitalWrite(direction_pin, HIGH);
     analogWrite(motor_pin, 255-abs(voltage));
   }
 }
@@ -93,8 +93,8 @@ float read_accel_data() {
   float AccZ = (Wire.read() << 8 | Wire.read()) / 16384.0; // Z-axis value
   
   // Calculating Roll and Pitch from the accelerometer data
-  float accAngleX = atan(AccY / sqrt(pow(AccX, 2) + pow(AccZ, 2))) + degree_to_radian(1.11); // AccErrorX ~(-1.11) See the calculate_IMU_error()custom function for more details
-  float accAngleY = atan(-1 * AccX / sqrt(pow(AccY, 2) + pow(AccZ, 2))) + degree_to_radian(3.37); // AccErrorY ~(-3.37)
+  float accAngleX = atan(AccY / sqrt(pow(AccX, 2) + pow(AccZ, 2))) + degree_to_radian(0.3); // AccErrorX ~(-1.11) See the calculate_IMU_error()custom function for more details
+  float accAngleY = atan(-1 * AccX / sqrt(pow(AccY, 2) + pow(AccZ, 2))) + degree_to_radian(86.0); // AccErrorY ~(-3.37)
 
   //return accAngleX;
   return accAngleY; 
@@ -114,9 +114,9 @@ float read_gyro_data() {
   float GyroZ = (Wire.read() << 8 | Wire.read()) * gyro_to_radian;
   
   // Correct the outputs with the calculated error values
-  GyroX = GyroX + degree_to_radian(2.68); // GyroErrorX ~(-2.68)
+  GyroX = GyroX + degree_to_radian(2.50); // GyroErrorX ~(-2.68)
   GyroY = GyroY + degree_to_radian(1.92); // GyroErrorY ~(-1.92)
-  GyroZ = GyroZ + degree_to_radian(1.18); // GyroErrorZ ~ (-1.18)
+  GyroZ = GyroZ + degree_to_radian(1.15); // GyroErrorZ ~ (-1.18)
 
   //return GyroX;
   return GyroY;

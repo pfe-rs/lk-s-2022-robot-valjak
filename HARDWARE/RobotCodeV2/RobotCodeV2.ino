@@ -100,6 +100,7 @@ void failsafes(){
     Serial.print("System fail.\nError code: ");
     if(errCode = 1){ Serial.print("Battery Voltage Low");};
     if(errCode = 2){ Serial.print("IMU Angle too High");};
+    while(1){Serial.println("SYS HALT");delay(100);};
     }
   }
 
