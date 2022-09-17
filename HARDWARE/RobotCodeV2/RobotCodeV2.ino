@@ -1,9 +1,5 @@
 #include <Wire.h>
 
-const int MPU = 0x68; // MPU6050 I2C address
-const int directionPin = 10;
-const int motorPin = 9;
-volatile int counter; //vrednost enkodera od pocetka koda
 float AccX, AccY, AccZ;
 float GyroX, GyroY, GyroZ;
 float accAngleX, accAngleY, gyroAngleX, gyroAngleY, gyroAngleZ;
@@ -12,128 +8,27 @@ float pitch = 0;
 float yaw = 0;
 float AccErrorX, AccErrorY, GyroErrorX, GyroErrorY, GyroErrorZ;
 float elapsedTime, currentTime, previousTime;
+
+//String errCodes[] = ["BVL","IATH"]
+
 int c = 0;
+char n;
+String out, temp;
+int motorOut;
 
 unsigned long dt = 5000;
 unsigned long previous_time = 0;
 
-void encoder(){
-  if(digitalRead(4)) counter++;
-  else counter--;
-}
+const int MPU = 0x68; // MPU6050 I2C address
+const int directionPin = 10;
+const int motorPin = 9;
+const int batSens = A0;
+const int robotDia = 22; 
+int motorPWM;
+volatile int counter; //vrednost enkodera od pocetka koda
 
-void setup() {
-  Serial.begin(9600);
-
-  pinMode(3,INPUT_PULLUP);
-  pinMode(4,INPUT_PULLUP);
-  pinMode(directionPin,OUTPUT);
-  pinMode(motorPin,OUTPUT);
-  attachInterrupt(digitalPinToInterrupt(3), encoder, RISING);
-  Serial.println("conection.......");
-  
-  MPU6050_initialization();
-  
-  /*
-  // Configure Accelerometer Sensitivity - Full Scale Range (default +/- 2g)
-  Wire.beginTransmission(MPU);
-  Wire.write(0x1C);                  //Talk to the ACCEL_CONFIG register (1C hex)
-  Wire.write(0x10);                  //Set the register bits as 00010000 (+/- 8g full scale range)
-  Wire.endTransmission(true);
-  // Configure Gyro Sensitivity - Full Scale Range (default +/- 250deg/s)
-  Wire.beginTransmission(MPU);
-  Wire.write(0x1B);                   // Talk to the GYRO_CONFIG register (1B hex)
-  Wire.write(0x10);                   // Set the register bits as 00010000 (1000deg/s full scale)
-  Wire.endTransmission(true);
-  delay(20);
-  */
-  
-  // Call this function if you need to get the IMU error values for your module
-  //calculate_IMU_error();
-//  delay(20);
-}
-
-
-void loop() {
-  //Serial.println("...............................");
-  char n;
-  String out, temp;
-  int motorOut;
-
-  
-  float accAngleY = read_accel_data();
-    
-  float GyroY = read_gyro_data();
-  
-  // Complementary filter - combine acceleromter and gyro angle values
-  float tau = 0.2;
-  float alpha = tau/(tau + 0.005);
-  pitch = (1 - alpha)*(pitch + (GyroY * dt)/1000000.0) + alpha * accAngleY;//pitch range +/- 1.56
-  //Serial.println(pitch);
-  // Print the values on the serial monitor
-  //Serial.print(pitch);
-  //Serial.println();
-//  if(Serial.available()>0){
-////    Serial.println("check");
-//    char n = Serial.read();
-//    if(n != '\n'){
-//      temp += n;
-//      //Serial.println(n);
-//      }
-//    else{
-//      out = temp;
-//      motorOut = out.toInt();
-//      Serial.println(temp);
-//      Serial.println(motorOut);
-//      driveMotor(motorOut);
-//      Serial.println(motorOut);
-//      temp = "";
-//      }
-//    }
-    
-    while (Serial.available() > 0) {
-      
-    char n = Serial.read();
-    if (isDigit(n)||n=='-') {
-      temp += n;
-    }
-    if (n == '\n' || n == '\r') {
-      motorOut = temp.toInt();
-      driveMotor(motorOut);
-      Serial.print(temp);
-      Serial.print(',');
-      temp = "";
-    }
-  }
-  
-  
-
-  // Time control
-  while(micros() < previous_time + dt) {}
-  previous_time = micros();
-  delay(1);
-}
-
-float readEncoderData(){
-  return counter/(2*PI);
-  }
-
-void driveMotor(int speed){
-
-  Serial.println(speed);
-
-  speed = min(speed,12);
-  speed = max(speed,-12);
-
-  speed = map(speed,-12,12,-255,255);
-  
-  
-
-//  Serial.print(speed);
-//  Serial.print(',');
-  if(speed>0){digitalWrite(directionPin,LOW);analogWrite(motorPin,abs(speed));/*Serial.println(1);*/};
-  if(speed<=0){digitalWrite(directionPin,HIGH);analogWrite(motorPin,255-abs(speed));/*Serial.println(-1);*/};
-  }
+float degree_to_radian(float degree) {return (degree * PI)/180.0;}
+float radian_to_degree(float radian) {return (radian * 180.0)/PI;}
 
 void MPU6050_initialization() {
   Wire.begin();                      // Initialize comunication
@@ -186,10 +81,85 @@ float read_gyro_data() {
   //return GyroZ;
 }
 
-float degree_to_radian(float degree) {return (degree * PI)/180.0;}
-float radian_to_degree(float radian) {return (radian * 180.0)/PI;}
+//String errCodes[] = ["Battery Voltage Low","IMU Angle too High"]
+
+float getBatteryVoltage(){
+  int voltage;
+  float voltageOut;
+  voltage = analogRead(A0);
+  voltageOut = voltage * 4.23 / 205;
+  return voltageOut;
+  }
+
+void failsafes(){
+  int errCode = 0;
+  if(getBatteryVoltage() < 15){errCode = 1;};
+  if(pitch > 1){errCode = 2;};
+
+  if(errCode != 0){
+    Serial.print("System fail.\nError code: ");
+    if(errCode = 1){ Serial.print("Battery Voltage Low");};
+    if(errCode = 2){ Serial.print("IMU Angle too High");};
+    }
+  }
+
+float readSpeed(){//Derives the speed based on the encoder readings in m/s
+  int time1, time2;
+  int counter2;
+  int speedT = 0;
+  float speedA = 0;
+
+  time2 = millis();
+  if(time2 - time1 > 100){
+    speedT = counter2 - counter;
+    counter2 = counter;
+    speedA = speedT * 10;
+    speedA = speedA / 360 * PI * robotDia;
+    return speedA;
+    }
+  }
+
+float readAngleSpeed(){//Derives the speed based on the encoder readings in Rad/s
+  int time1, time2;
+  int counter2;
+  int speedT = 0;
+  float speedA = 0;
+
+  time2 = millis();
+  if(time2 - time1 > 100){
+    speedT = counter2 - counter;
+    counter2 = counter;
+    speedA = speedT * 10;
+    speedA = speedA / 360;
+    return speedA;
+    }
+  }
+
+void printData(){
+  float printSpeed = readSpeed();
+  float VBat = getBatteryVoltage();
+  float upTime = millis()/1000;
+  pitch = imuPitch();
+  
+    String out = "";
+    out += pitch;out +=", ";
+    out += counter;out +=", ";
+    out += motorPWM;out +=", ";
+    out += VBat;out +=", ";
+    out += upTime;
+    
+  Serial.println(out);
+  }
+
+float readEncoderData(){
+  return counter/(2*PI);
+  }
 
 void calculate_IMU_error() {
+
+  
+
+
   // We can call this funtion in the setup section to calculate the accelerometer and gyro data error. From here we will get the error values used in the above equations printed on the Serial Monitor.
   // Note that we should place the IMU flat in order to get the proper values, so that we then can the correct values
   // Read accelerometer values 200 times
@@ -240,4 +210,78 @@ void calculate_IMU_error() {
   Serial.println(GyroErrorY);
   Serial.print("GyroErrorZ: ");
   Serial.println(GyroErrorZ);
+}
+
+void encoder(){
+  if(digitalRead(4)){
+    counter++;
+    }else{counter--;};
+}
+
+void driveMotor(int voltage){
+  int limit = 5;
+  Serial.println(voltage);
+
+  voltage = min(voltage,12);
+  voltage = max(voltage,-12);
+  voltage = map(voltage,-12,12,-255,255);
+  
+  motorPWM = voltage;
+
+//  Serial.print(speed);
+//  Serial.print(',');
+  if(voltage>0){digitalWrite(directionPin,LOW);analogWrite(motorPin,abs(voltage));/*Serial.println(1);*/};
+  if(voltage<=0){digitalWrite(directionPin,HIGH);analogWrite(motorPin,255-abs(voltage));/*Serial.println(-1);*/};
+  }
+
+float imuPitch(){
+  float accAngleY = read_accel_data();
+    
+  float GyroY = read_gyro_data();
+  
+  // Complementary filter - combine acceleromter and gyro angle values
+  float tau = 0.2;
+  float alpha = tau/(tau + 0.005);
+  pitch = (1 - alpha)*(pitch + (GyroY * dt)/1000000.0) + alpha * accAngleY;//pitch range +/- 1.56
+  }
+
+void setup() {
+  Serial.begin(9600);
+
+  pinMode(3,INPUT_PULLUP);
+  pinMode(4,INPUT_PULLUP);
+  pinMode(directionPin,OUTPUT);
+  pinMode(motorPin,OUTPUT);
+  attachInterrupt(digitalPinToInterrupt(3), encoder, RISING);
+  Serial.println("conection.......");
+  
+  MPU6050_initialization();
+}
+
+void loop() {
+  
+//   while (Serial.available() > 0) {
+//      char n = Serial.read();
+//      if (isDigit(n)||n=='-') {
+//        temp += n;
+//    }
+//    if (n == '\n' || n == '\r') {
+//      motorOut = temp.toInt();
+//      driveMotor(motorOut);
+//      Serial.print(temp);
+//      Serial.print(',');
+//      temp = "";
+//    }
+//  }
+
+  
+
+  // Time control
+  while(micros() < previous_time + dt) {}
+  previous_time = micros();
+
+  
+
+  printData();
+  delay(1);
 }
