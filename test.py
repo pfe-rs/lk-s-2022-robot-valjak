@@ -1,14 +1,18 @@
-import csv
+import numpy as np
+import matplotlib.pyplot as plt
+from transfer_function import transfer_function
 
-header = ["acceleration angle", "gyroscope velocity"]
+# number_of_iterations = 150
+# highpass = transfer_function([1, 0], [1, 10], number_of_iterations)
 
-angles = [1, 1, 1, 1,  1]
-gyro = [2, 2, 2, 2,  2]
-data = [[angles[i], gyro[i]] for i in range(len(angles))]
+# plt.plot(np.arange(number_of_iterations)*0.005, highpass.inpute_response(np.arange(number_of_iterations)))
+# plt.show()
 
-with open('test.csv', 'w', encoding='UTF8', newline='') as f:
-    writer = csv.writer(f)
-
-    writer.writerow(header)
-
-    writer.writerows(data)
+import control
+omega = 100
+high_pass_filter = transfer_function([1, 0], [1, omega], 2001)
+print(high_pass_filter.sys_ss)
+t = np.linspace(0, 10, 2001)
+f = high_pass_filter.inpute_response(np.sin(t))
+plt.plot(t, f)
+plt.show()
