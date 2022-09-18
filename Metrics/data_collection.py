@@ -3,15 +3,17 @@ import serial
 import numpy as np
 import matplotlib.pyplot as plt
 
-arduinoData = serial.Serial('/dev/ttyUSB0', 115200)
+arduinoData = serial.Serial('COM8', 9600)
 time.sleep(1)
 
 dt = 0.005
-number_of_iterations = 1000
+number_of_iterations = 3000
+
 t = np.arange(number_of_iterations)*dt
 accel_output = []
 gyro_output = []
 
+dataPacket = arduinoData.readline() #reply
 for i in range(number_of_iterations):
     while (arduinoData.inWaiting()==0):
         pass
@@ -21,7 +23,8 @@ for i in range(number_of_iterations):
     splitPacket=dataPacket.split(",")
     accAngleY = float(splitPacket[0])
     gyroY = float(splitPacket[1])
-    print ("accAngleY = ", accAngleY, "   Y = ", gyroY)
+    encoder = float(splitPacket[2])
+    print ("accAngleY = ", accAngleY, "   gyroY = ", gyroY, "   encoder = ", encoder)
 
     accel_output.append(accAngleY)
     gyro_output.append(gyroY)
