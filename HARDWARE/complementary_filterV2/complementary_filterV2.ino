@@ -15,7 +15,7 @@ unsigned long dt = 5000;
 unsigned long previous_time = 0;
 
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(9600);
   
   MPU6050_initialization();
   
@@ -38,27 +38,6 @@ void setup() {
   delay(20);
 }
 
-
-void loop() {
-  
-  float accAngleY = read_accel_data();
-    
-  float GyroY = read_gyro_data();
-  
-  // Complementary filter - combine acceleromter and gyro angle values
-  float tau = 0.2;
-  float alpha = tau/(tau + 0.005);
-  pitch = (1 - alpha)*(pitch + (GyroY * dt)/1000000.0) + alpha * accAngleY;
-  
-  // Print the values on the serial monitor
-//  Serial.print(pitch);
-//  Serial.println();
-
-  // Time control
-  while(micros() < previous_time + dt) {}
-  previous_time = micros();
-}
-
 void MPU6050_initialization() {
   Wire.begin();                      // Initialize comunication
   Wire.beginTransmission(MPU);       // Start communication with MPU6050 // MPU=0x68
@@ -66,6 +45,11 @@ void MPU6050_initialization() {
   Wire.write(0x00);                  // Make reset - place a 0 into the 6B register
   Wire.endTransmission(true);        //end the transmission
 }
+
+struct Vec {
+  float x, y, z;
+  Vec(float x, float y, float z) : x(x), y(y), z(z) {}
+};
 
 float read_accel_data() {
   // === Read acceleromter data === //
@@ -78,16 +62,37 @@ float read_accel_data() {
   float AccX = (Wire.read() << 8 | Wire.read()) / 16384.0; // X-axis value
   float AccY = (Wire.read() << 8 | Wire.read()) / 16384.0; // Y-axis value
   float AccZ = (Wire.read() << 8 | Wire.read()) / 16384.0; // Z-axis value
+//  Serial.print(AccX);
+//  Serial.print(", ");
+//  Serial.print(AccY);
+//  Serial.print(", ");
+//  Serial.print(AccZ);
+//  Serial.print(", ");
+//  Serial.println(AccX * AccX + AccY * AccY + AccZ * AccZ);
   
   // Calculating Roll and Pitch from the accelerometer data
-  float accAngleX = atan(AccY / sqrt(pow(AccX, 2) + pow(AccZ, 2))) + degree_to_radian(1.11); // AccErrorX ~(-1.11) See the calculate_IMU_error()custom function for more details
-  float accAngleY = atan(-1 * AccX / sqrt(pow(AccY, 2) + pow(AccZ, 2))) + degree_to_radian(3.37); // AccErrorY ~(-3.37)
+  // float accAngleX = atan(AccY / sqrt(pow(AccX, 2) + pow(AccZ, 2))) + degree_to_radian(1.11); // AccErrorX ~(-1.11) See the calculate_IMU_error()custom function for more details
+  // float accAngleY = atan(-1 * AccX / sqrt(pow(AccY, 2) + pow(AccZ, 2))) + degree_to_radian(3.37); // AccErrorY ~(-3.37)
 
-  Serial.print(accAngleX);
-  Serial.print(", ");
-  Serial.println(accAngleY);
-  //return accAngleX;
-  return accAngleY; 
+  // izmerite g
+  // izmeriti osaRotacije
+
+  float accLen = sqrt(AccX*AccX + AccY*AccY + AccZ*AccZ);
+  Vec acc(AccX / accLen, AccY / accLen, AccZ / accLen);
+  Vec g(1, 0, 0);
+  Vec osaRotacije(0.0195, -0.985, 0.068);
+
+  float dot = acc.x * g.x + acc.y * g.y + acc.z * g.z;
+  float theta = acos(dot);
+
+  float crossX = acc.y * g.z - acc.z * g.y;
+  float crossY = acc.z * g.x - acc.x * g.z;
+  float crossZ = acc.x * g.y - acc.y * g.x;
+  float sign = osaRotacije.x * crossX + osaRotacije.y * crossY + osaRotacije.z * crossZ;
+  sign = sign > 0 ? 1 : -1;
+
+  Serial.println(sign * theta);
+  return sign * theta;
 }
 
 float read_gyro_data() {
@@ -167,4 +172,25 @@ void calculate_IMU_error() {
   Serial.println(GyroErrorY);
   Serial.print("GyroErrorZ: ");
   Serial.println(GyroErrorZ);
+}
+
+
+void loop() {
+  
+  float accAngleY = read_accel_data();
+    
+  float GyroY = read_gyro_data();
+  
+  // Complementary filter - combine acceleromter and gyro angle values
+  float tau = 0.2;
+  float alpha = tau/(tau + 0.005);
+  pitch = (1 - alpha)*(pitch + (GyroY * dt)/1000000.0) + alpha * accAngleY;
+  
+  // Print the values on the serial monitor
+  Serial.print(pitch);
+  Serial.println();
+
+  // Time control
+  while(micros() < previous_time + dt) {}
+  previous_time = micros();
 }

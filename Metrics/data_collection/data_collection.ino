@@ -51,7 +51,7 @@ void loop() {
   // Complementary filter - combine acceleromter and gyro angle values
   float tau = 0.2;
   float alpha = tau/(tau + 0.005);
-  pitch = (1 - alpha)*(pitch + (GyroY * dt)/1000000.0) + alpha * accAngleY
+  pitch = (1 - alpha)*(pitch + (GyroY * dt)/1000000.0) + alpha * accAngleY;
   
   Serial.print(pitch);
   Serial.print(",");
@@ -59,7 +59,7 @@ void loop() {
   Serial.print(",");
   Serial.print(encoder);
   Serial.print('\n');
-  
+//  
   if(abs(pitch) < 1.0){
     stepFunct();
   }else{drive_motor(0);}
@@ -73,7 +73,7 @@ void loop() {
 void stepFunct(){
   int timeout = 5000;
   int timein = 2500;
-  int nIterations = 3;
+  int nIterations = 5;
   time2 = millis();
   if(time2 - time1 > timein && state == 0){drive_motor(3);time1 = time2;state = 1;};
   if(time2 - time1 > timeout && state == 1){drive_motor(0);time1 = time2;state = 2;};
@@ -109,6 +109,11 @@ void MPU6050_initialization() {
   Wire.endTransmission(true);        //end the transmission
 }
 
+struct Vec {
+  float x, y, z;
+  Vec(float x, float y, float z) : x(x), y(y), z(z) {}
+};
+
 float read_accel_data() {
   // === Read acceleromter data === //
   Wire.beginTransmission(MPU);
@@ -120,13 +125,32 @@ float read_accel_data() {
   float AccX = (Wire.read() << 8 | Wire.read()) / 16384.0; // X-axis value
   float AccY = (Wire.read() << 8 | Wire.read()) / 16384.0; // Y-axis value
   float AccZ = (Wire.read() << 8 | Wire.read()) / 16384.0; // Z-axis value
-  
-  // Calculating Roll and Pitch from the accelerometer data
-  float accAngleX = atan(AccY / sqrt(pow(AccX, 2) + pow(AccZ, 2))) + degree_to_radian(0.3); // AccErrorX ~(-1.11) See the calculate_IMU_error()custom function for more details
-  float accAngleY = atan(-1 * AccX / sqrt(pow(AccY, 2) + pow(AccZ, 2))) + degree_to_radian(86.0); // AccErrorY ~(-3.37)
+//  Serial.print(AccX);
+//  Serial.print(", ");
+//  Serial.print(AccY);
+//  Serial.print(", ");
+//  Serial.print(AccZ);
+//  Serial.print(", ");
+//  Serial.println(AccX * AccX + AccY * AccY + AccZ * AccZ);
 
-  //return accAngleX;
-  return accAngleY; 
+  // izmerite g
+  // izmeriti osaRotacije
+  float accLen = sqrt(AccX*AccX + AccY*AccY + AccZ*AccZ);
+  Vec acc(AccX / accLen, AccY / accLen, AccZ / accLen);
+  Vec g(1, 0, 0);
+  Vec osaRotacije(0.0195, -0.985, 0.068);
+
+  float dot = acc.x * g.x + acc.y * g.y + acc.z * g.z;
+  float theta = acos(dot);
+
+  float crossX = acc.y * g.z - acc.z * g.y;
+  float crossY = acc.z * g.x - acc.x * g.z;
+  float crossZ = acc.x * g.y - acc.y * g.x;
+  float sign = osaRotacije.x * crossX + osaRotacije.y * crossY + osaRotacije.z * crossZ;
+  sign = sign > 0 ? 1 : -1;
+
+//  Serial.println(sign * theta);
+  return sign * theta;
 }
 
 float read_gyro_data() {

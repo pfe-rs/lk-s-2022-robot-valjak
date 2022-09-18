@@ -4,7 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 arduinoData = serial.Serial('COM8', 9600)
-time.sleep(5)
+time.sleep(1)
 
 dt = 0.005
 number_of_iterations = 3000
