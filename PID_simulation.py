@@ -54,7 +54,6 @@ H_voltageToRobotAngle = control.series(H_voltageToRobotVelocity, control.tf([1],
 H_voltageToInclinationAngle = control.minreal(control.parallel(H_voltageToPendulumAngle, H_voltageToRobotAngle))
 H_voltageToInclinationVelocity = control.minreal(control.parallel(H_voltageToPendulumVelocity, H_voltageToRobotVelocity))
 
-
 # Discretization of H_voltageToInclinationAngle and H_voltageToRobotAnlge
 dt = 0.005
 H_voltageToInclinationAngleDiscrete = control.sample_system(H_voltageToInclinationAngle, dt, method='zoh')
@@ -71,16 +70,10 @@ H_matrix = control.tf([H_voltageToInclinationAngleDiscrete.num[0],
                        H_voltageToPendulumAngleDiscrete.den[0]],
                       dt)
 sys_ss_matrix = control.tf2ss(H_matrix)
+print(H_matrix)
+print(sys_ss_matrix)
 
 number_of_iterations = 10000
-
-def sign_function(x):
-    if x > 0:
-        return 1
-    elif x == 0:
-        return 0
-    else:
-        return -1
 
 def add_noise():
     variance_accel = 0.002
@@ -283,9 +276,9 @@ if __name__ == "__main__":
     import pygame as pg
     import pygamebg
 
-    # inclination_angles, robot_angles = PID_inclination_angle()
+    inclination_angles, robot_angles = PID_inclination_angle()
     # inclination_angles, robot_angles = PID_robot_angular_velocity()
-    inclination_angles, robot_angles = PID_robot_angle()
+    # inclination_angles, robot_angles = PID_robot_angle()
     
     pg.init()
     (width, height) = (700, 700)
