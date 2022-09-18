@@ -38,7 +38,7 @@ import csv
 header = ["pitch", "voltage"]
 data = [[output[i], input[i]] for i in range(number_of_iterations)]
 
-with open('data.csv', 'w', encoding='UTF8', newline='') as f:
+with open('./Metrics/data.csv', 'w', encoding='UTF8', newline='') as f:
     writer = csv.writer(f)
     writer.writerow(header)
     writer.writerows(data)
