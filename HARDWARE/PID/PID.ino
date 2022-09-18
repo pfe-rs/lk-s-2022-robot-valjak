@@ -5,6 +5,10 @@
 #define direction_pin 10
 #define motor_pin     9
 
+const float Kp = 1;
+const float Ki = 0;
+const float Kd = 0;
+
 const int MPU = 0x68; // MPU6050 I2C address
 float AccX, AccY, AccZ;
 float GyroX, GyroY, GyroZ;
@@ -14,10 +18,13 @@ float pitch = 0;
 float yaw = 0;
 float AccErrorX, AccErrorY, GyroErrorX, GyroErrorY, GyroErrorZ;
 float elapsedTime, currentTime, previousTime;
+long int elapsedTimePID, currentTimePID, previousTimePID;
+float error, lastError, rateError, cumError, setpoint, input;
 int c = 0;
 
 float global_voltage = 0;
 
+int sysState = 0;
 int time1 = 0;
 int time2 = 0;
 int state = 1;
@@ -39,12 +46,45 @@ void setup() {
   
   MPU6050_initialization();
   
-  // Call this function if you need to get the IMU error values for your module
-//  calculate_IMU_error();
+  
   delay(10000);
 }
  
 void loop() {
+  compFilter();
+  setpoint = degree_to_radian(60);
+  driveMotor(PID(pitch));
+
+  
+  
+  
+  //if(abs(pitch) < 1.0){
+    //stepFunct();
+  //}else{driveMotor(0);}
+  
+  
+  // Time control
+  while(micros() < previous_time + dt) {}
+  previous_time = micros();
+}
+
+float PID(float input){
+  currentTimePID = millis();
+  elapsedTimePID = currentTimePID - previousTimePID;
+
+  error = setpoint - input; //offset
+  cumError += error * elapsedTimePID; //used for I component
+  rateError = (error - lastError)/elapsedTimePID; //used for D component
+
+  float output = Kp * error + Ki * cumError + Kd * rateError; //calculating output
+
+  lastError = error;
+  previousTime = currentTime; //updating parameters
+
+  return output;
+  }
+
+void compFilter(){
   float accAngleY = read_accel_data();
   float GyroY = read_gyro_data();
   float encoder = read_encoder_data();
@@ -53,44 +93,43 @@ void loop() {
   float tau = 0.2;
   float alpha = tau/(tau + 0.005);
   pitch = (1 - alpha)*(pitch + (GyroY * dt)/1000000.0) + alpha * accAngleY;
-  
-  Serial.print(pitch);
-  Serial.print(",");
-  Serial.print(global_voltage);
-  Serial.print('\n');
-//  
-  if(abs(pitch) < 1.0){
-    stepFunct();
-  }else{drive_motor(0);}
-  
-  
-  // Time control
-  while(micros() < previous_time + dt) {}
-  previous_time = micros();
-}
+  }
 
 void stepFunct(){
   int timeout = 5000;
   int timein = 2500;
   int nIterations = 5;
   time2 = millis();
-  if(time2 - time1 > timein && state == 0){drive_motor(3);time1 = time2;state = 1;};
-  if(time2 - time1 > timeout && state == 1){drive_motor(0);time1 = time2;state = 2;};
-  if(time2 - time1 > timein && state == 2){drive_motor(-3);time1 = time2;state = 3;};
-  if(time2 - time1 > timeout && state == 3){drive_motor(0);time1 = time2;state = 0;i++;};
-  if(i == nIterations){drive_motor(0);state = -1;};
+  if(time2 - time1 > timein && state == 0){driveMotor(3);time1 = time2;state = 1;};
+  if(time2 - time1 > timeout && state == 1){driveMotor(0);time1 = time2;state = 2;};
+  if(time2 - time1 > timein && state == 2){driveMotor(-3);time1 = time2;state = 3;};
+  if(time2 - time1 > timeout && state == 3){driveMotor(0);time1 = time2;state = 0;i++;};
+  if(i == nIterations){driveMotor(0);state = -1;};
 }
+
+void failsafes(){
+  int errCode = 0;
+  if(getBatteryVoltage() < 15){errCode = 1;};
+  if(pitch > 1){errCode = 2;};
+
+  if(errCode != 0){
+    Serial.print("System fail.\nError code: ");
+    if(errCode = 1){ Serial.print("Battery Voltage Low");};
+    if(errCode = 2){ Serial.print("IMU Angle too High");};
+    while(1){Serial.println("SYS HALT");delay(100);};
+    }
+  }
 
 void encoder_interrupt() {
   if(digitalRead(encoder_pin)) encoder_counter++;
   else encoder_counter--;
 }
 
-void drive_motor(int voltage) {
-  int limit = 5;
-
+void driveMotor(float voltage) {
+  int limit = 100;
+  
   global_voltage = voltage;
-  voltage = map(constrain(voltage, -limit, limit), -12, 12, -255, 255);
+  voltage = constrain(int(voltage), -limit, limit);
 
   if(voltage>0) {
     digitalWrite(direction_pin, LOW);
@@ -101,6 +140,46 @@ void drive_motor(int voltage) {
   }
 }
 
+float getBatteryVoltage(){
+  int voltage;
+  float voltageOut;
+  voltage = analogRead(A0);
+  voltageOut = voltage * 4.23 / 205;
+  return voltageOut;
+  }
+
+float readSpeed(){//Derives the speed based on the encoder readings in m/s
+  int time1, time2;
+  int counter2;
+  int speedT = 0;
+  float speedA = 0;
+
+  time2 = millis();
+  if(time2 - time1 > 100){
+    speedT = counter2 - encoder_counter;
+    counter2 = encoder_counter;
+    speedA = speedT * 10;
+    speedA = speedA / 600 * PI * 22;
+    return speedA;
+    }
+  }
+
+void printData(){
+  float printSpeed = readSpeed();
+  float VBat = getBatteryVoltage();
+  float upTime = millis()/1000;
+  
+    String out = "";
+    out += pitch;out +=",";
+    out += encoder_counter;out +=",";
+    out += global_voltage;out +=",";
+    out += VBat;out +=",";
+    out += sysState;out +=",";
+    out += upTime;
+    
+  Serial.println(out);
+  }
+  
 void MPU6050_initialization() {
   Wire.begin();                      // Initialize comunication
   Wire.beginTransmission(MPU);       // Start communication with MPU6050 // MPU=0x68
@@ -125,13 +204,6 @@ float read_accel_data() {
   float AccX = (Wire.read() << 8 | Wire.read()) / 16384.0; // X-axis value
   float AccY = (Wire.read() << 8 | Wire.read()) / 16384.0; // Y-axis value
   float AccZ = (Wire.read() << 8 | Wire.read()) / 16384.0; // Z-axis value
-//  Serial.print(AccX);
-//  Serial.print(", ");
-//  Serial.print(AccY);
-//  Serial.print(", ");
-//  Serial.print(AccZ);
-//  Serial.print(", ");
-//  Serial.println(AccX * AccX + AccY * AccY + AccZ * AccZ);
 
   // izmerite g
   // izmeriti osaRotacije
@@ -159,6 +231,7 @@ float read_gyro_data() {
   Wire.write(0x43); // Gyro data first register address 0x43
   Wire.endTransmission(false);
   Wire.requestFrom(MPU, 6, true); // Read 4 registers total, each axis value is stored in 2 registers
+
   
   const float gyro_to_radian = PI/(180.0*131.0); // 131.0 is from datasheet
   float GyroX = (Wire.read() << 8 | Wire.read()) * gyro_to_radian; // For a 250deg/s range we have to divide first the raw value by 131.0, according to the datasheet
@@ -182,56 +255,3 @@ float read_encoder_data() {
 
 float degree_to_radian(float degree) {return (degree * PI)/180.0;}
 float radian_to_degree(float radian) {return (radian * 180.0)/PI;}
-
-void calculate_IMU_error() {
-  // We can call this funtion in the setup section to calculate the accelerometer and gyro data error. From here we will get the error values used in the above equations printed on the Serial Monitor.
-  // Note that we should place the IMU flat in order to get the proper values, so that we then can the correct values
-  // Read accelerometer values 200 times
-  while (c < 200) {
-    Wire.beginTransmission(MPU);
-    Wire.write(0x3B);
-    Wire.endTransmission(false);
-    Wire.requestFrom(MPU, 6, true);
-    AccX = (Wire.read() << 8 | Wire.read()) / 16384.0 ;
-    AccY = (Wire.read() << 8 | Wire.read()) / 16384.0 ;
-    AccZ = (Wire.read() << 8 | Wire.read()) / 16384.0 ;
-    // Sum all readings
-    AccErrorX = AccErrorX + ((atan((AccY) / sqrt(pow((AccX), 2) + pow((AccZ), 2))) * 180 / PI));
-    AccErrorY = AccErrorY + ((atan(-1 * (AccX) / sqrt(pow((AccY), 2) + pow((AccZ), 2))) * 180 / PI));
-    c++;
-  }
-  //Divide the sum by 200 to get the error value
-  AccErrorX = AccErrorX / 200;
-  AccErrorY = AccErrorY / 200;
-  c = 0;
-  // Read gyro values 200 times
-  while (c < 200) {
-    Wire.beginTransmission(MPU);
-    Wire.write(0x43);
-    Wire.endTransmission(false);
-    Wire.requestFrom(MPU, 6, true);
-    GyroX = Wire.read() << 8 | Wire.read();
-    GyroY = Wire.read() << 8 | Wire.read();
-    GyroZ = Wire.read() << 8 | Wire.read();
-    // Sum all readings
-    GyroErrorX = GyroErrorX + (GyroX / 131.0);
-    GyroErrorY = GyroErrorY + (GyroY / 131.0);
-    GyroErrorZ = GyroErrorZ + (GyroZ / 131.0);
-    c++;
-  }
-  //Divide the sum by 200 to get the error value
-  GyroErrorX = GyroErrorX / 200;
-  GyroErrorY = GyroErrorY / 200;
-  GyroErrorZ = GyroErrorZ / 200;
-  // Print the error values on the Serial Monitor
-  Serial.print("AccErrorX: ");
-  Serial.println(AccErrorX);
-  Serial.print("AccErrorY: ");
-  Serial.println(AccErrorY);
-  Serial.print("GyroErrorX: ");
-  Serial.println(GyroErrorX);
-  Serial.print("GyroErrorY: ");
-  Serial.println(GyroErrorY);
-  Serial.print("GyroErrorZ: ");
-  Serial.println(GyroErrorZ);
-}
