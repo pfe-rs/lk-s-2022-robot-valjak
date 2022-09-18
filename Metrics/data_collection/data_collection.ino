@@ -56,6 +56,10 @@ void loop() {
   
   Serial.print(pitch);
   Serial.print(",");
+  Serial.print(GyroY);
+  Serial.print(",");
+  Serial.print(encoder);
+  Serial.print(",");
   Serial.print(global_voltage);
   Serial.print('\n');
 //  
@@ -159,6 +163,7 @@ float read_gyro_data() {
   Wire.write(0x43); // Gyro data first register address 0x43
   Wire.endTransmission(false);
   Wire.requestFrom(MPU, 6, true); // Read 4 registers total, each axis value is stored in 2 registers
+
   
   const float gyro_to_radian = PI/(180.0*131.0); // 131.0 is from datasheet
   float GyroX = (Wire.read() << 8 | Wire.read()) * gyro_to_radian; // For a 250deg/s range we have to divide first the raw value by 131.0, according to the datasheet
