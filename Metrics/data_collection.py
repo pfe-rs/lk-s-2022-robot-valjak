@@ -10,8 +10,8 @@ dt = 0.005
 number_of_iterations = 3000
 
 t = np.arange(number_of_iterations)*dt
-accel_output = []
-gyro_output = []
+output = []
+input = []
 
 dataPacket = arduinoData.readline() #reply
 for i in range(number_of_iterations):
@@ -21,22 +21,22 @@ for i in range(number_of_iterations):
     dataPacket = arduinoData.readline() #reply
     dataPacket = str(dataPacket,'utf-8')
     splitPacket=dataPacket.split(",")
-    accAngleY = float(splitPacket[0])
-    gyroY = float(splitPacket[1])
-    encoder = float(splitPacket[2])
-    print ("accAngleY = ", accAngleY, "   gyroY = ", gyroY, "   encoder = ", encoder)
+    pitch = float(splitPacket[0])
+    voltage = float(splitPacket[1])
+    print ("pitch = ", pitch, "   voltage = ", voltage)
 
-    accel_output.append(accAngleY)
-    gyro_output.append(gyroY)
+    output.append(pitch)
+    input.append(voltage)
 
-plt.plot(t, accel_output)
+plt.plot(t, output)
+plt.plot(t, input)
 plt.show()
 
 # Data saving
 import csv
 
-header = ["acceleration angle", "gyroscope velocity"]
-data = [[accel_output[i], gyro_output[i]] for i in range(number_of_iterations)]
+header = ["pitch", "voltage"]
+data = [[output[i], input[i]] for i in range(number_of_iterations)]
 
 with open('data.csv', 'w', encoding='UTF8', newline='') as f:
     writer = csv.writer(f)
