@@ -10,7 +10,9 @@ dt = 0.005
 number_of_iterations = 3000
 
 t = np.arange(number_of_iterations)*dt
-output = []
+inclination_anlges = []
+gyros = []
+encoders = []
 input = []
 
 dataPacket = arduinoData.readline() #reply
@@ -21,22 +23,28 @@ for i in range(number_of_iterations):
     dataPacket = arduinoData.readline() #reply
     dataPacket = str(dataPacket,'utf-8')
     splitPacket=dataPacket.split(",")
-    pitch = float(splitPacket[0])
-    voltage = float(splitPacket[1])
-    print ("pitch = ", pitch, "   voltage = ", voltage)
+    inclination_anlge = float(splitPacket[0])
+    gyro = float(splitPacket[1])
+    encoder = float(splitPacket[2])
+    voltage = float(splitPacket[3])
+    print ("Inclination_angle = ", inclination_anlge, " gyro = ", gyro, " encoder = ", encoder, " voltage = ", voltage)
 
-    output.append(pitch)
+    inclination_anlges.append(inclination_anlge)
+    gyros.append(gyro)
+    encoders.append(encoder)
     input.append(voltage)
 
-plt.plot(t, output)
+plt.plot(t, inclination_anlges)
+plt.plot(t, gyros)
+plt.plot(t, encoders)
 plt.plot(t, input)
 plt.show()
 
 # Data saving
 import csv
 
-header = ["pitch", "voltage"]
-data = [[output[i], input[i]] for i in range(number_of_iterations)]
+header = ["Inclination anlges", "Gyros", "Encoders", "Voltage"]
+data = [[inclination_anlges[i], gyros[i], encoders[i], input[i]] for i in range(number_of_iterations)]
 
 with open('./Metrics/data.csv', 'w', encoding='UTF8', newline='') as f:
     writer = csv.writer(f)

@@ -5,9 +5,13 @@
 #define direction_pin 10
 #define motor_pin     9
 
-const float Kp = 1;
-const float Ki = 0;
+
+
+const float Kp = 6;
+const float Ki = 0.000001;
 const float Kd = 0;
+
+
 
 const int MPU = 0x68; // MPU6050 I2C address
 float AccX, AccY, AccZ;
@@ -47,12 +51,15 @@ void setup() {
   MPU6050_initialization();
   
   
-  delay(10000);
+  for(int i = 10;i > 0;i--){
+    delay(1000);
+    Serial.println(i);
+    };
 }
  
 void loop() {
   compFilter();
-  setpoint = degree_to_radian(60);
+  setpoint = degree_to_radian(30);
   driveMotor(PID(pitch));
 
   
@@ -62,8 +69,12 @@ void loop() {
     //stepFunct();
   //}else{driveMotor(0);}
   
-  
+  Serial.print(pitch);
+  Serial.print(',');
+  Serial.println(global_voltage);
   // Time control
+
+  
   while(micros() < previous_time + dt) {}
   previous_time = micros();
 }
@@ -126,11 +137,13 @@ void encoder_interrupt() {
 }
 
 void driveMotor(float voltage) {
-  int limit = 100;
+  int limit = 5;
   
-  global_voltage = voltage;
-  voltage = constrain(int(voltage), -limit, limit);
+  
+  voltage = constrain(-voltage*21.25, -limit*21.25, limit*21.25);
+  global_voltage = voltage/21.25;
 
+  
   if(voltage>0) {
     digitalWrite(direction_pin, LOW);
     analogWrite(motor_pin, voltage);
