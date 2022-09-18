@@ -25,6 +25,7 @@ float elapsedTime, currentTime, previousTime;
 long int elapsedTimePID, currentTimePID, previousTimePID;
 float error, lastError, rateError, cumError, setpoint, input;
 int c = 0;
+int counter2;
 
 float global_voltage = 0;
 
@@ -51,16 +52,16 @@ void setup() {
   MPU6050_initialization();
   
   
-  for(int i = 10;i > 0;i--){
-    delay(1000);
-    Serial.println(i);
-    };
+//  for(int i = 10;i > 0;i--){
+//    delay(1000);
+//    Serial.println(i);
+//    };
 }
  
 void loop() {
   compFilter();
   setpoint = degree_to_radian(30);
-  driveMotor(PID(pitch));
+  //driveMotor(PID(pitch));
 
   
   
@@ -69,11 +70,12 @@ void loop() {
     //stepFunct();
   //}else{driveMotor(0);}
   
-  Serial.print(pitch);
-  Serial.print(',');
-  Serial.println(global_voltage);
+//  Serial.print(pitch);
+//  Serial.print(',');
+//  Serial.println(global_voltage);
   // Time control
 
+  printData();
   
   while(micros() < previous_time + dt) {}
   previous_time = micros();
@@ -157,22 +159,22 @@ float getBatteryVoltage(){
   int voltage;
   float voltageOut;
   voltage = analogRead(A0);
-  voltageOut = voltage * 4.23 / 205;
+  voltageOut = voltage / 205;
   return voltageOut;
   }
 
 float readSpeed(){//Derives the speed based on the encoder readings in m/s
   int time1, time2;
-  int counter2;
+  
   int speedT = 0;
   float speedA = 0;
 
   time2 = millis();
   if(time2 - time1 > 100){
     speedT = counter2 - encoder_counter;
+    time1 = time2;
     counter2 = encoder_counter;
-    speedA = speedT * 10;
-    speedA = speedA / 600 * PI * 22;
+    speedA = speedT / 60 * PI * 22;
     return speedA;
     }
   }
@@ -181,10 +183,10 @@ void printData(){
   float printSpeed = readSpeed();
   float VBat = getBatteryVoltage();
   float upTime = millis()/1000;
-  
+  float speed = readSpeed();
     String out = "";
     out += pitch;out +=",";
-    out += encoder_counter;out +=",";
+    out += speed;out +=",";
     out += global_voltage;out +=",";
     out += VBat;out +=",";
     out += sysState;out +=",";
