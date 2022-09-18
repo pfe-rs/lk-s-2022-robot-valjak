@@ -73,7 +73,7 @@ sys_ss_matrix = control.tf2ss(H_matrix)
 print(H_matrix)
 print(sys_ss_matrix)
 
-number_of_iterations = 10000
+number_of_iterations = 100000
 
 def add_noise():
     variance_accel = 0.002
@@ -97,7 +97,7 @@ class Plant:
 
     def next_output(self, sys_input, noise=False):
         x = sys_ss_matrix.A.dot(self.x1_matrix) + sys_ss_matrix.B*sys_input
-        y = sys_ss_matrix.C.dot(self.x1_matrix) if noise == False else sys_ss_matrix.C.dot(x) + add_noise()
+        y = sys_ss_matrix.C.dot(self.x1_matrix) + sys_ss_matrix.D*sys_input if noise == False else sys_ss_matrix.C.dot(x) + add_noise()
         self.x1_matrix = x
         self.f_matrix.append(y)
 
