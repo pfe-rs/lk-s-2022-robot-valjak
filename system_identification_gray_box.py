@@ -25,6 +25,13 @@ with open("./Metrics/data.csv") as file:
             encoders.append(float(row[2]))
             system_input.append(float(row[3]))
 
+plt.plot(t, inclination_angles)
+# plt.plot(t, gyros)
+plt.plot(t, encoders)
+plt.plot(t, system_input)
+plt.show()
+exit()
+
 def model(ulaz, plot_data=False):
     r, d, R, j_1, j_2, m_1, m_2, k_e, k_t, T_v = ulaz
     print(ulaz)
