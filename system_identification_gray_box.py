@@ -25,7 +25,7 @@ with open("./Metrics/data.csv") as file:
             encoders.append(float(row[2]))
             system_input.append(float(row[3]))
 
-def model(ulaz):
+def model(ulaz, plot_data=False):
     r, d, R, j_1, j_2, m_1, m_2, k_e, k_t, T_v = ulaz
     print(ulaz)
     g = 9.81
@@ -107,10 +107,13 @@ def model(ulaz):
             return np.array(self.f_matrix)
     
     plant = Plant()
-    system_output = plant.input_response(system_input)
+    # system_output = plant.input_response(system_input)
+    system_output = plant.input_response(np.ones(number_of_iterations)*3)
     
-    # plt.plot(t, system_output[1:,0,0])
-    # plt.show()
+    if plot_data == True:
+        plt.plot(t, inclination_angles)
+        plt.plot(t, system_output[1:,0,0])
+        plt.show()
 
     return system_output
 
@@ -122,28 +125,29 @@ def error_functions(ulaz):
 
     system_output = model(ulaz)
 
-    ret = np.mean(np.square(system_output[1:,0,0] - (inclination_angles - np.mean(inclination_angles[:100]))) + 
-                  np.square(system_output[1:,1,0] - gyros) + 
-                  np.square(system_output[1:,2,0] - encoders))
+    ret = np.mean(np.square(system_output[1:,0,0] - (inclination_angles - np.mean(inclination_angles[:300])))) #+ 
+                #   np.square(system_output[1:,1,0] - gyros) + 
+                #   np.square(system_output[1:,2,0] - encoders))
     print(ret)
     return ret
 
+if __name__=="__main__":
+    x_min = 1e-3
+    x_max = 1
+    xx = [
+        (0.2, 0.2), #r
+        (0.05, 0.15),   #d
+        (x_min, x_max), #R
+        (x_min, 0.1),   #j_1
+        (x_min, 0.1),   #j_2
+        (x_min, 2),     #m_1
+        (x_min, 2), #m_2
+        (x_min, 1e-2), #k_e
+        (x_min, 1e-2), #k_t
+        (x_min, x_max)] #T_v
+    optimized_params = differential_evolution(error_functions, bounds=xx, maxiter=10, popsize=10)
+    print(optimized_params)
 
-x_min = 1e-3
-x_max = 1
-xx = [
-    (0.2, 0.2), #r
-    (0.05, 0.15),   #d
-    (x_min, x_max), #R
-    (x_min, 0.1),   #j_1
-    (x_min, 0.1),   #j_2
-    (x_min, 2),     #m_1
-    (x_min, 2), #m_2
-    (x_min, 1e-2), #k_e
-    (x_min, 1e-2), #k_t
-    (x_min, x_max)] #T_v
-optimized_params = differential_evolution(error_functions, bounds=xx, maxiter=1, popsize=1)
-print(optimized_params)
+    model(optimized_params.x, True)
 
-with open('param.npy', 'wb') as file:
-    np.save(file, optimized_params)
+    np.save('param.npy', optimized_params.x)

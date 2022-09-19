@@ -73,7 +73,7 @@ sys_ss_matrix = control.tf2ss(H_matrix)
 print(H_matrix)
 print(sys_ss_matrix)
 
-number_of_iterations = 100000
+number_of_iterations = 3000
 
 def add_noise():
     variance_accel = 0.002
@@ -276,9 +276,9 @@ if __name__ == "__main__":
     import pygame as pg
     import pygamebg
 
-    inclination_angles, robot_angles = PID_inclination_angle()
+    # inclination_angles, robot_angles = PID_inclination_angle()
     # inclination_angles, robot_angles = PID_robot_angular_velocity()
-    # inclination_angles, robot_angles = PID_robot_angle()
+    inclination_angles, robot_angles = PID_robot_angle()
     
     pg.init()
     (width, height) = (700, 700)
