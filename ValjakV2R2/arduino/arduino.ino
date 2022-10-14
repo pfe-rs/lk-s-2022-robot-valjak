@@ -5,40 +5,34 @@
 #define direction_pin 10
 #define motor_pin     9
 
+const float KpAngle = 6;
+const float KiAngle = 0.000001;
+const float KdAngle = 0;
 
+const float KpSpeed = 6;
+const float KiSpeed = 0.000001;
+const float KdSpeed = 0;
 
-const float Kp = 6;
-const float Ki = 0.000001;
-const float Kd = 0;
-
-
+const float KpPosition = 6;
+const float KiPosition = 0.000001;
+const float KdPosition = 0;
 
 const int MPU = 0x68; // MPU6050 I2C address
 float AccX, AccY, AccZ;
 float GyroX, GyroY, GyroZ;
 float accAngleX, accAngleY, gyroAngleX, gyroAngleY, gyroAngleZ;
-float roll = 0; 
-float pitch = 0;
-float yaw = 0;
 float AccErrorX, AccErrorY, GyroErrorX, GyroErrorY, GyroErrorZ;
-float elapsedTime, currentTime, previousTime;
-long int elapsedTimePID, currentTimePID, previousTimePID;
-float error, lastError, rateError, cumError;
-int c = 0;
-int counter2;
+
+float pitch = 0;
+
+volatile int encoderCounter = 0;
+long counter2;
 
 float global_voltage = 0;
-
 int sysState = 0;
-int time1 = 0;
-int time2 = 0;
-int state = 1;
-int i = 0;
 
 unsigned long dt = 0.005;
 unsigned long previous_time = 0;
-
-volatile int encoder_counter = 0;
 
 void setup() {
   Serial.begin(9600);
@@ -51,7 +45,7 @@ void setup() {
   
   MPU6050_initialization();
   
-  delay(5000);
+  //delay(5000);
 //  for(int i = 10;i > 0;i--){
 //    delay(1000);
 //    Serial.println(i);
@@ -60,40 +54,80 @@ void setup() {
  
 void loop() {
   compFilter();
-  driveMotor(PID(degree_to_radian(60), pitch));
 
   
-  
-  
-//  if(abs(pitch) < 1.2){
-//    driveMotor(12);
-//  }else{driveMotor(0);}
-  
-//  Serial.print(pitch);
-//  Serial.print(',');
-//  Serial.println(global_voltage);
-  // Time control
+  float positionSetpoint = 20;
+  float PIDP = PIDPosition(positionSetpoint,positionEstimate());
+  float PIDS = PIDSpeed(PIDP,speedEstimate());
+  float PIDA = PIDAngle(PIDS,pitch);
+  //driveMotor(PIDA);
 
-  printData();
+  
+  //printData();
   
   while(micros() < previous_time + dt) {}
   previous_time = micros();
 }
 
-float PID(float setpoint, float input){
-  currentTimePID = millis();
-  elapsedTimePID = currentTimePID - previousTimePID;
+unsigned long currentTimePIDAngle, elapsedTimePIDAngle, previousTimePIDAngle;
+float errorAngle, cumErrorAngle, rateErrorAngle, lastErrorAngle;
 
-  error = setpoint - input; //offset
-  cumError += error * elapsedTimePID; //used for I component
+float PIDAngle(float setpoint, float input){
+  currentTimePIDAngle = millis();
+  elapsedTimePIDAngle = currentTimePIDAngle - previousTimePIDAngle;
+
+  errorAngle = setpoint - input; //offset
+  cumErrorAngle += errorAngle * elapsedTimePIDAngle; //used for I component
+  const float intErrLimit = 0.001;
+  cumErrorAngle = constrain(cumErrorAngle, -intErrLimit,intErrLimit);
+  rateErrorAngle = (errorAngle - lastErrorAngle)/elapsedTimePIDAngle; //used for D component
+
+  float output = KpAngle * errorAngle + KiAngle * cumErrorAngle + KdAngle * rateErrorAngle; //calculating output
+
+  lastErrorAngle = errorAngle;
+  previousTimePIDAngle = currentTimePIDAngle; //updating parameters
+
+  return output;
+  }
+
+unsigned long currentTimePIDSpeed, elapsedTimePIDSpeed, previousTimePIDSpeed;
+float errorSpeed, cumErrorSpeed, rateErrorSpeed, lastErrorSpeed;
+
+float PIDSpeed(float setpoint, float input){
+  currentTimePIDSpeed = millis();
+  elapsedTimePIDSpeed = currentTimePIDSpeed - previousTimePIDSpeed;
+
+  errorSpeed = setpoint - input; //offset
+  cumErrorSpeed += errorSpeed * elapsedTimePIDSpeed; //used for I component
+  const float intErrLimit = 0.001;
+  cumErrorSpeed = constrain(cumErrorSpeed, -intErrLimit,intErrLimit);
+  rateErrorSpeed = (errorSpeed - lastErrorSpeed)/elapsedTimePIDSpeed; //used for D component
+
+  float output = KpSpeed * errorSpeed + KiSpeed * cumErrorSpeed + KdSpeed * rateErrorSpeed; //calculating output
+
+  lastErrorSpeed = errorSpeed;
+  previousTimePIDSpeed = currentTimePIDSpeed; //updating parameters
+
+  return output;
+  }
+
+unsigned long currentTimePIDPosition, elapsedTimePIDPosition, previousTimePIDPosition;
+float errorPosition, cumErrorPosition, rateErrorPosition, lastErrorPosition;
+
+float PIDPosition(float setpoint, float input){
+  currentTimePIDPosition = millis();
+  elapsedTimePIDPosition = currentTimePIDPosition - previousTimePIDPosition;
+
+  errorPosition = setpoint - input; //offset
+  cumErrorPosition += errorPosition * elapsedTimePIDPosition; //used for I component
   const float intLimit = 0.001;
-  cumError = constrain(cumError, -intLimit,intLimit);
-  rateError = (error - lastError)/elapsedTimePID; //used for D component
+  cumErrorPosition = constrain(cumErrorPosition, -intLimit,intLimit);
+  rateErrorPosition = (errorPosition - lastErrorPosition)/elapsedTimePIDPosition; //used for D component
 
-  float output = Kp * error + Ki * cumError + Kd * rateError; //calculating output
+  float output = KpPosition * errorPosition + KiPosition * cumErrorPosition + KdPosition * rateErrorPosition; //calculating output
 
-  lastError = error;
-  previousTime = currentTime; //updating parameters
+  lastErrorPosition = errorPosition;
+  previousTimePIDPosition = currentTimePIDPosition; //updating parameters
 
   return output;
   }
@@ -101,13 +135,19 @@ float PID(float setpoint, float input){
 void compFilter(){
   float accAngleY = read_accel_data();
   float GyroY = read_gyro_data();
-  float encoder = read_encoder_data();
+  float encoder = readEncoderData();
 
   // Complementary filter - combine acceleromter and gyro angle values
   float tau = 0.2;
   float alpha = tau/(tau + 0.005);
   pitch = (1 - alpha)*(pitch + (GyroY * dt)/1000000.0) + alpha * accAngleY;
   }
+
+
+int i = 0;
+int state = 1;
+unsigned long time1 = 0;
+unsigned long time2 = 0;
 
 void stepFunct(){
   int timeout = 5000;
@@ -123,7 +163,7 @@ void stepFunct(){
 
 void failsafes(){
   int errCode = 0;
-  if(getBatteryVoltage() < 15){errCode = 1;};
+  if(getBatteryVoltage() < 14){errCode = 1;};
   if(pitch > 1){errCode = 2;};
 
   if(errCode != 0){
@@ -135,12 +175,14 @@ void failsafes(){
   }
 
 void encoder_interrupt() {
-  if(digitalRead(encoder_pin)) encoder_counter++;
-  else encoder_counter--;
+  if(digitalRead(encoder_pin)){encoderCounter++;
+  }else{
+    encoderCounter--;
+  };
 }
 
 void driveMotor(float voltage) {
-  int limit = 12;
+  const int limit = 12;
   
   
   voltage = constrain(-voltage*21.25, -limit*21.25, limit*21.25);
@@ -164,6 +206,35 @@ float getBatteryVoltage(){
   return voltageOut;
   }
 
+float Sest = 0, Xprev = 0; // Variable for the speedEstimate function
+unsigned long timePrev = 0, time = 0, diff = 10;
+
+float speedEstimate(){
+  float Xenc = readEncoderData(); //Distance reported by the encoder
+  float Ximu = pitch; //Distance reported by the IMU
+  float X = Xenc - Ximu; //Actual distance covered by the robot
+  float X2; //Speed of the robot
+  time = millis();
+  if(time - timePrev > diff){
+    X2 = (X - Xprev);
+    Serial.println(X2);
+    timePrev = time;
+    Xprev = X;
+    };
+  
+  
+  Sest = 0.6*Sest - X2;
+  float estSpeed = -0.4*Sest + X2;
+  return estSpeed;
+  }
+
+float positionEstimate(){
+  float Xenc = readEncoderData(); //Distance reported by the encoder
+  float Ximu = pitch; //Distance reported by the IMU
+  float X = Xenc - Ximu; //Actual distance covered by the robot
+  return X;
+  }
+
 float readSpeed(){//Derives the speed based on the encoder readings in m/s
   int time1, time2;
   
@@ -172,19 +243,18 @@ float readSpeed(){//Derives the speed based on the encoder readings in m/s
 
   time2 = millis();
   if(time2 - time1 > 100){
-    speedT = counter2 - encoder_counter;
+    speedT = counter2 - encoderCounter;
     time1 = time2;
-    counter2 = encoder_counter;
+    counter2 = encoderCounter;
     speedA = speedT / 60 * PI * 22;
     return speedA;
     }
   }
 
 void printData(){
-  float printSpeed = readSpeed();
   float VBat = getBatteryVoltage();
-  float upTime = millis()/1000;
-  float speed = readSpeed();
+  float upTime = millis()/1000.0;
+  float speed = speedEstimate();
     String out = "";
     out += pitch;out +=",";
     out += speed;out +=",";
@@ -264,9 +334,9 @@ float read_gyro_data() {
   //return GyroZ;
 }
 
-float read_encoder_data() {
+float readEncoderData() {
   float steps_per_revolution = 600;
-  return (encoder_counter*2.0*PI)/steps_per_revolution;
+  return (encoderCounter*2.0*PI)/steps_per_revolution;
 }
 
 float degree_to_radian(float degree) {return (degree * PI)/180.0;}
