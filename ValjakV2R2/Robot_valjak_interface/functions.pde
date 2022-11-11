@@ -3,7 +3,7 @@ void getData() {
     if (port.available() > 0) {
       inBuffer = port.readStringUntil(cr);
       if (inBuffer != null) {
-        println(inBuffer);
+        print(inBuffer);
         list = split(inBuffer, ',');
         if (list.length == 6) {
           for (int i = 0; i<6; i++) {
@@ -41,9 +41,10 @@ void getData() {
 
 void getControlerInput() {
   if (controlerPresent) {
-    dataOut = map(gpad.getSlider("stick1").getValue(), -1, 1, -controlerMax, controlerMax);
-    if(gpad.getButton("RL").pressed()){dataOut *= 2;}
-    if(gpad.getButton("RR").pressed()){dataOut *= 2;}
+    data = map(gpad.getSlider("stick1").getValue(), -1, 1, -controlerMax, controlerMax);
+    if(gpad.getButton("RL").pressed()){data *= 2;}
+    if(gpad.getButton("RR").pressed()){data *= 2;}
+    dataOut = int(data);
   }
 }
 
@@ -100,7 +101,7 @@ void drawScreen() {
   stroke(needles);
   line(width*speedX, height*speedY, width*speedX+sin(speedAngle-PI*4/18)*(angleReaderR/2-10), height*speedY+cos(speedAngle-PI*4/18)*(angleReaderR/2-10));
   fill(needleTextColor);
-  text(speedAngleT*14.3, width*speedX+sin(speedAngle-PI*4/18)*(angleReaderR/2+needleDist)-needleDist/2, height*speedY+cos(speedAngle-PI*4/18)*(angleReaderR/2+needleDist)+needleDist/2);
+  text(-speedAngleT*14.3, width*speedX+sin(speedAngle-PI*4/18)*(angleReaderR/2+needleDist)-needleDist/2, height*speedY+cos(speedAngle-PI*4/18)*(angleReaderR/2+needleDist)+needleDist/2);
 
   textSize(textHeight);
 

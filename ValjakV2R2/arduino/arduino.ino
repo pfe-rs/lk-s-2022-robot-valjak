@@ -77,6 +77,7 @@ void loop() {
     if(c == '\n'){
       set = setS.toInt();
       setS = "";
+      //Serial.println(constrain(set,-60,60));
       setPitch = degree_to_radian(constrain(set,-60,60));
       }
     
@@ -93,7 +94,7 @@ void loop() {
   
   //float setSpeed = (millis() - startTime)/1000.0;
   
-  if(millis() < 100000){
+  if(millis() < 300000){
   driveMotor(PIDA);
   }else{driveMotor(0);
   sysState = 1;}
@@ -175,7 +176,7 @@ float PIDPosition(float setpoint, float input){
 float Ppitch;
 
 void compFilter(){
-  float accAngleY = read_accel_data();
+  float accAngleY = read_accel_data() + 0.06;
   float GyroY = read_gyro_data();
   float encoder = readEncoderData();
 
@@ -209,8 +210,8 @@ void stepFunct(){
 
 void failsafes(){
   int errCode = 0;
-  if(getBatteryVoltage() < 0){errCode = 2;};
-  if(pitch > 1.5){errCode = 3;};
+  if(getBatteryVoltage() < 0){errCode = 1;};
+  if(abs(pitch) > 1.5){errCode = 2;};
   
   if(errCode != 0){
     if(errCode = 1){sysState = 2;};
@@ -230,8 +231,8 @@ void driveMotor(float voltage) {
       const int limit = 12;
   
       
-      voltage = constrain(voltage*21.25, -limit*21.25, limit*21.25);
-      global_voltage = voltage/21.25;
+      voltage = constrain(-voltage*21.25, -limit*21.25, limit*21.25);
+      global_voltage = -voltage/21.25;
 
   
       if(voltage>0) {
@@ -296,6 +297,8 @@ float positionEstimate(){
   return X;
   }
 
+int outCounter;
+
 void printData(){
   float VBat = getBatteryVoltage();
   float upTime = millis()/1000.0;
@@ -306,8 +309,12 @@ void printData(){
     out += VBat;out +=",";
     out += sysState;out +=",";
     out += upTime;
-    
-  Serial.println(out);
+  if(outCounter == 5){
+    Serial.println(out);
+    outCounter = 0;
+    }
+  outCounter++;
+  
   }
   
 void MPU6050_initialization() {
@@ -340,7 +347,7 @@ float read_accel_data() {
   float accLen = sqrt(AccX*AccX + AccY*AccY + AccZ*AccZ);
   Vec acc(AccX / accLen, AccY / accLen, AccZ / accLen);
   Vec g(1, 0, 0);
-  Vec osaRotacije(0.0195, -0.985, 0.068);
+  Vec osaRotacije(0.000, -0.985, 0.000);
 
   float dot = acc.x * g.x + acc.y * g.y + acc.z * g.z;
   float theta = acos(dot);

@@ -10,7 +10,7 @@ Configuration config;
 ControlDevice gpad;
 
 
-boolean demo = true;
+boolean demo = false;
 boolean controlerPresent = true;
 
 
@@ -41,19 +41,21 @@ void setup() {
   };
 
 
-  frameRate(1000);
+  frameRate(500);
 }
 
 void draw() {
   getData();
   getControlerInput();
   getArrowKeys();
-  
-  println(dataOut);
+
+  //println("d" + dataOut);
   if (!demo) {
-    port.write(str((int)dataOut));
-    port.write('\n');
+    if (frameCount % 5 == 0) {
+      port.write(str(dataOut));
+      port.write('\n');
+    }
   }
-  
+
   drawScreen();
 }

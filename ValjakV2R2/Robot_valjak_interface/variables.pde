@@ -74,4 +74,5 @@ float[] listF = {0, 0, 0, 0, 0, 0};
 
 
 float controlerMax = 15.0;
-float dataOut = 0;
+float data = 0;
+int dataOut = 0;
