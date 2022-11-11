@@ -73,5 +73,5 @@ String list[] = {"1.00", "1.00", "12", "15", "0", "2500"};
 float[] listF = {0, 0, 0, 0, 0, 0};
 
 
-float controlerMax = 60.0;
-int dataOut;
+float controlerMax = 15.0;
+float dataOut = 0;

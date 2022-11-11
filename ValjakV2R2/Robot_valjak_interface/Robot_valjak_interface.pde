@@ -16,14 +16,14 @@ boolean controlerPresent = true;
 
 
 void setup() {
-  //fullScreen();
-  size(1000, 500);
+  fullScreen();
+  //size(1000, 500);
   surface.setResizable(true);
-  
+
   System.setProperty("net.java.games.input.useDefaultPlugin", "false");
-  
+
   control = ControlIO.getInstance(this);
-  gpad = control.filter(1).getMatchedDevice("speed");
+  gpad = control.getMatchedDevice("speed");
 
   //controller check
   if (gpad == null) {
@@ -31,7 +31,7 @@ void setup() {
     controlerPresent = false;
   }
 
-  
+
   if (!demo) {
     String portName = "COM8";
     port = new Serial(this, portName, 9600);
@@ -48,8 +48,12 @@ void draw() {
   getData();
   getControlerInput();
   getArrowKeys();
+  
   println(dataOut);
-  port.write(str(dataOut));
-  port.write('\n');
+  if (!demo) {
+    port.write(str((int)dataOut));
+    port.write('\n');
+  }
+  
   drawScreen();
 }

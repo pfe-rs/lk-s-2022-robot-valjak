@@ -41,9 +41,9 @@ void getData() {
 
 void getControlerInput() {
   if (controlerPresent) {
-    dataOut = (int)map(gpad.getSlider("stick1").getValue(), -1, 1, -controlerMax, controlerMax);
-    if(gpad.getButton("RL").pressed()){dataOut /= 2;}
-    if(gpad.getButton("RR1").pressed()){dataOut /= 2;}
+    dataOut = map(gpad.getSlider("stick1").getValue(), -1, 1, -controlerMax, controlerMax);
+    if(gpad.getButton("RL").pressed()){dataOut *= 2;}
+    if(gpad.getButton("RR").pressed()){dataOut *= 2;}
   }
 }
 
