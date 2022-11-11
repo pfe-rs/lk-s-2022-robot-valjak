@@ -5,8 +5,8 @@
 #define direction_pin 10
 #define motor_pin     9
 
-const float KpAngle = 6;
-const float KiAngle = 0.000001;
+const float KpAngle = 7;
+const float KiAngle = 0.004;
 const float KdAngle = 0;
 
 const float KpSpeed = 6;
@@ -24,9 +24,13 @@ float accAngleX, accAngleY, gyroAngleX, gyroAngleY, gyroAngleZ;
 float AccErrorX, AccErrorY, GyroErrorX, GyroErrorY, GyroErrorZ;
 
 float pitch = 0;
+float setPitch;
+int set;
+String setS;
+float speed;
+float position;
 
 volatile int encoderCounter = 0;
-long counter2;
 
 float global_voltage = 0;
 int sysState = 0;
@@ -34,7 +38,14 @@ int sysState = 0;
 unsigned long dt = 0.005;
 unsigned long previous_time = 0;
 
+float cumErrorAngle;
+
+long startTime;
+
 void setup() {
+
+  delay(100);
+  
   Serial.begin(9600);
 
   pinMode(interrupt_pin,INPUT_PULLUP);
@@ -45,32 +56,59 @@ void setup() {
   
   MPU6050_initialization();
   
-  //delay(5000);
-//  for(int i = 10;i > 0;i--){
-//    delay(1000);
-//    Serial.println(i);
-//    };
+  for(int i = 8;i > 0;i--){
+    delay(1000);
+    Serial.println(i);
+    };
+
+    startTime = millis();
 }
  
 void loop() {
   compFilter();
+  speed = speedEstimate();
+  position = positionEstimate();
+
+  if(Serial.available()){
+    char c = Serial.read();
+    if(isDigit(c) || c == '-'){
+      setS += c;
+      }
+    if(c == '\n'){
+      set = setS.toInt();
+      setS = "";
+      setPitch = degree_to_radian(constrain(set,-60,60));
+      }
+    
+    }
 
   
   float positionSetpoint = 20;
-  float PIDP = PIDPosition(positionSetpoint,positionEstimate());
-  float PIDS = PIDSpeed(PIDP,speedEstimate());
-  float PIDA = PIDAngle(PIDS,pitch);
-  //driveMotor(PIDA);
+  float PIDP = PIDPosition(positionSetpoint,position);
+  float PIDS = PIDSpeed(PIDP,speed);
+//  float setPitch = degree_to_radian(30);
+  float PIDA = PIDAngle(setPitch,pitch);
 
   
-  //printData();
+  
+  //float setSpeed = (millis() - startTime)/1000.0;
+  
+  if(millis() < 100000){
+  driveMotor(PIDA);
+  }else{driveMotor(0);
+  sysState = 1;}
+
+
+  failsafes();
+  printData();
+  
   
   while(micros() < previous_time + dt) {}
   previous_time = micros();
 }
 
 unsigned long currentTimePIDAngle, elapsedTimePIDAngle, previousTimePIDAngle;
-float errorAngle, cumErrorAngle, rateErrorAngle, lastErrorAngle;
+float errorAngle,  rateErrorAngle, lastErrorAngle;
 
 float PIDAngle(float setpoint, float input){
   currentTimePIDAngle = millis();
@@ -78,7 +116,9 @@ float PIDAngle(float setpoint, float input){
 
   errorAngle = setpoint - input; //offset
   cumErrorAngle += errorAngle * elapsedTimePIDAngle; //used for I component
-  const float intErrLimit = 0.001;
+  
+  const float intErrLimit = 1000;
+ 
   cumErrorAngle = constrain(cumErrorAngle, -intErrLimit,intErrLimit);
   rateErrorAngle = (errorAngle - lastErrorAngle)/elapsedTimePIDAngle; //used for D component
 
@@ -132,6 +172,8 @@ float PIDPosition(float setpoint, float input){
   return output;
   }
 
+float Ppitch;
+
 void compFilter(){
   float accAngleY = read_accel_data();
   float GyroY = read_gyro_data();
@@ -141,6 +183,10 @@ void compFilter(){
   float tau = 0.2;
   float alpha = tau/(tau + 0.005);
   pitch = (1 - alpha)*(pitch + (GyroY * dt)/1000000.0) + alpha * accAngleY;
+  //smoting low-pass filter
+  float alphaS = 0.9;
+  Ppitch = Ppitch * alphaS + pitch * (1 - alphaS);
+  pitch = Ppitch;
   }
 
 
@@ -163,14 +209,12 @@ void stepFunct(){
 
 void failsafes(){
   int errCode = 0;
-  if(getBatteryVoltage() < 14){errCode = 1;};
-  if(pitch > 1){errCode = 2;};
-
+  if(getBatteryVoltage() < 0){errCode = 2;};
+  if(pitch > 1.5){errCode = 3;};
+  
   if(errCode != 0){
-    Serial.print("System fail.\nError code: ");
-    if(errCode = 1){ Serial.print("Battery Voltage Low");};
-    if(errCode = 2){ Serial.print("IMU Angle too High");};
-    while(1){Serial.println("SYS HALT");delay(100);};
+    if(errCode = 1){sysState = 2;};
+    if(errCode = 2){sysState = 2;};
     }
   }
 
@@ -182,50 +226,67 @@ void encoder_interrupt() {
 }
 
 void driveMotor(float voltage) {
-  const int limit = 12;
+  if(sysState == 2){voltage = 0;};
+      const int limit = 12;
   
-  
-  voltage = constrain(-voltage*21.25, -limit*21.25, limit*21.25);
-  global_voltage = voltage/21.25;
+      
+      voltage = constrain(voltage*21.25, -limit*21.25, limit*21.25);
+      global_voltage = voltage/21.25;
 
   
-  if(voltage>0) {
-    digitalWrite(direction_pin, LOW);
-    analogWrite(motor_pin, voltage);
-  } else {
-    digitalWrite(direction_pin, HIGH);
-    analogWrite(motor_pin, 255-abs(voltage));
-  }
+      if(voltage>0) {
+        digitalWrite(direction_pin, LOW);
+        analogWrite(motor_pin, voltage);
+      } else {
+        digitalWrite(direction_pin, HIGH);
+        analogWrite(motor_pin, 255-abs(voltage));
+      }
 }
 
+float voltageOut = 16.8;
+
 float getBatteryVoltage(){
-  int voltage;
-  float voltageOut;
+  float voltage = 16.8;
+  float alpha = 0.95;
   voltage = analogRead(A0);
-  voltageOut = voltage / 205.0 * 4.23;
+  voltage = voltage / 205.0 * 4.35;
+  voltageOut = voltageOut*alpha + voltage*(1-alpha);
   return voltageOut;
   }
 
-float Sest = 0, Xprev = 0; // Variable for the speedEstimate function
-unsigned long timePrev = 0, time = 0, diff = 10;
+float Sest = 0, Xprev = 0, X;; // Variable for the speedEstimate function
+long timePrev = 0, time = 0, diff = 10;
 
 float speedEstimate(){
   float Xenc = readEncoderData(); //Distance reported by the encoder
   float Ximu = pitch; //Distance reported by the IMU
-  float X = Xenc - Ximu; //Actual distance covered by the robot
+  float X1 = (Xenc - Ximu)*100; //Actual distance covered by the robot
   float X2; //Speed of the robot
+
+   
+   float alpha = 0.9;
+   X = X*alpha + X1*(1-alpha);
+  
+  
   time = millis();
   if(time - timePrev > diff){
     X2 = (X - Xprev);
-    Serial.println(X2);
+ 
+//   Serial.print(X);
+//   Serial.print(',');
+//   Serial.print(Xprev);
+//   Serial.print(',');
+//   Serial.print(X2);
+//   Serial.print(',');
+//   Serial.println(Sest);
+   
     timePrev = time;
     Xprev = X;
     };
   
-  
-  Sest = 0.6*Sest - X2;
-  float estSpeed = -0.4*Sest + X2;
-  return estSpeed;
+  Sest = alpha*Sest + X2*(1-alpha);
+
+  return Sest;
   }
 
 float positionEstimate(){
@@ -235,26 +296,9 @@ float positionEstimate(){
   return X;
   }
 
-float readSpeed(){//Derives the speed based on the encoder readings in m/s
-  int time1, time2;
-  
-  int speedT = 0;
-  float speedA = 0;
-
-  time2 = millis();
-  if(time2 - time1 > 100){
-    speedT = counter2 - encoderCounter;
-    time1 = time2;
-    counter2 = encoderCounter;
-    speedA = speedT / 60 * PI * 22;
-    return speedA;
-    }
-  }
-
 void printData(){
   float VBat = getBatteryVoltage();
   float upTime = millis()/1000.0;
-  float speed = speedEstimate();
     String out = "";
     out += pitch;out +=",";
     out += speed;out +=",";

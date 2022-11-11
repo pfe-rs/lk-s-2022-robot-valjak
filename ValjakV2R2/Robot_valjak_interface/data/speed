@@ -1,0 +1,4 @@
+Controller speed 
+stick1	stick1 speed	3	SLIDER	Z Rotation	0	-1.0	0.0
+RL	Left trigger	1	BUTTON	Button 6	0	0.0	0.0
+RR	Right trigger	1	BUTTON	Button 7	0	0.0	0.0
